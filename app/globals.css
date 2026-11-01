@@ -1,18 +1,27 @@
 @import "tailwindcss";
 
+/* One warm neutral ramp (paper, card, raised, line, two text roles), green for the main action
+   and "free", and the logo's amber ring for "on loan". */
 @theme inline {
   --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, monospace;
   --color-paper: #fbfaf7;
+  --color-card: #ffffff;
+  --color-raised: #f2efe9;
+  --color-line: #e7e3db;
   --color-ink: #1d1b18;
   --color-muted: #6b665e;
-  --color-line: #e7e3db;
   --color-brand: #1f6f4a;
-  --color-brand-soft: #e6f2ea;
+  --color-brand-strong: #185a3c;
+  --color-loan: #d08a2b;
+  --color-danger: #b42318;
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 body {
   background: var(--color-paper);
   color: var(--color-ink);
+  font-variant-numeric: tabular-nums;
 }
 
 /* Visible keyboard focus everywhere, quiet for mouse users. */

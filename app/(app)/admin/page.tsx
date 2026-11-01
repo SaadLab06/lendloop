@@ -7,6 +7,8 @@ import { api } from "@/convex/_generated/api";
 import { LoanCard } from "@/components/LoanCard";
 import { ToolCard } from "@/components/ToolCard";
 import { Badge, Button, Card, EmptyState, ErrorText, LoadingCards, PageHeader } from "@/components/ui";
+
+const plural = (count: number, word: string) => `${count} ${word}${count === 1 ? "" : "s"}`;
 import { timeAgo, todayUtc } from "@/lib/format";
 import { useSubmit } from "@/lib/useSubmit";
 
@@ -19,7 +21,7 @@ export default function AdminPage() {
   }
   return (
     <>
-      <PageHeader title="Admin" description="Automation health, members, all loans and all listings." />
+      <PageHeader title="Admin" description="Automation health, members, all loans and all listings" />
       <div className="space-y-10">
         <AutomationHealth />
         <Members myId={me._id} />
@@ -33,7 +35,7 @@ export default function AdminPage() {
 function Section({ title, children }: { title: string; children: ReactNode }) {
   return (
     <section>
-      <h2 className="mb-3 text-lg font-semibold">{title}</h2>
+      <h2 className="mb-3 text-lg font-medium">{title}</h2>
       {children}
     </section>
   );
@@ -48,7 +50,9 @@ function AutomationHealth() {
   return (
     <Section title="Automation health">
       <p className="mb-3 text-sm text-muted">
-        {health.pendingCount === 0 ? "No events waiting for delivery." : `${health.pendingCount} event(s) waiting for delivery or retry.`}
+        {health.pendingCount === 0
+          ? "No events waiting for delivery"
+          : `${plural(health.pendingCount, "event")} waiting for delivery or retry`}
       </p>
       {healthy ? (
         <EmptyState title="All clear">No failed deliveries and no failed n8n runs.</EmptyState>
@@ -61,7 +65,7 @@ function AutomationHealth() {
                   Webhook not delivered: {event.type} ({event.status})
                 </p>
                 <p className="text-muted">
-                  {event.attempts} attempts · {timeAgo(event.at)} · {event.lastError}
+                  {plural(event.attempts, "attempt")} · {timeAgo(event.at)} · {event.lastError}
                 </p>
               </div>
               <Button variant="secondary" disabled={retry.pending} onClick={() => void retry.run({ outboxId: event._id })}>
@@ -110,12 +114,12 @@ function MemberRow({ user, isMe }: { user: Member; isMe: boolean }) {
   const setTrusted = useSubmit(useMutation(api.admin.setTrustedLender));
   const setRole = useSubmit(useMutation(api.admin.setRole));
   return (
-    <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
+    <div className="flex flex-wrap items-center justify-between gap-3 px-5 py-3">
       <div className="min-w-0 text-sm">
         <p className="flex flex-wrap items-center gap-2 font-medium">
           {user.name} {isMe && <span className="text-muted">(you)</span>}
-          {user.role === "admin" && <Badge tone="blue">Admin</Badge>}
-          {user.trustedLender && <Badge tone="violet">Trusted Lender</Badge>}
+          {user.role === "admin" && <Badge>Admin</Badge>}
+          {user.trustedLender && <Badge>Trusted Lender</Badge>}
         </p>
         <p className="truncate text-muted">{user.email ?? "No email"}</p>
         <ErrorText>{setTrusted.error ?? setRole.error}</ErrorText>

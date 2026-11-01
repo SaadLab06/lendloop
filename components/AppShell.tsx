@@ -43,16 +43,17 @@ export function AppShell({ children }: { children: ReactNode }) {
 
   return (
     <div className="min-h-screen">
-      <header className="sticky top-0 z-10 border-b border-line bg-paper/90 backdrop-blur">
+      <header className="sticky top-0 z-10 border-b border-line bg-paper">
         <div className="mx-auto flex max-w-5xl items-center justify-between gap-4 px-4 py-3 sm:px-6">
           <Logo href="/tools" />
           <div className="flex items-center gap-3">
-            {me?.trustedLender && <Badge tone="violet">Trusted Lender</Badge>}
+            {me?.trustedLender && <Badge>Trusted Lender</Badge>}
             <UserButton />
           </div>
         </div>
-        <nav aria-label="Main" className="mx-auto max-w-5xl overflow-x-auto px-2 sm:px-4">
-          <ul className="flex gap-1 pb-2">
+        {/* The list's negative margin lines the first label up with the logo. */}
+        <nav aria-label="Main" className="mx-auto max-w-5xl overflow-x-auto px-4 sm:px-6">
+          <ul className="-mx-3 flex gap-1 pb-2">
             {nav.map((item) => {
               const active = pathname.startsWith(item.href);
               return (
@@ -60,7 +61,7 @@ export function AppShell({ children }: { children: ReactNode }) {
                   <Link
                     href={item.href}
                     aria-current={active ? "page" : undefined}
-                    className={`block whitespace-nowrap rounded-lg px-3 py-1.5 text-sm ${active ? "bg-brand-soft font-medium text-brand" : "text-muted hover:bg-stone-100 hover:text-ink"}`}
+                    className={`block whitespace-nowrap rounded-lg px-3 py-2 text-sm transition-colors duration-150 ease-out ${active ? "bg-raised font-medium text-ink" : "text-muted hover:bg-raised/60 hover:text-ink"}`}
                   >
                     {item.label}
                   </Link>

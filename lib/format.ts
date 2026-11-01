@@ -30,6 +30,12 @@ export function timeAgo(timestamp: number, now: number = Date.now()): string {
   return "just now";
 }
 
+/** `count` calendar days as "YYYY-MM-DD", starting with `start`. Stepping in UTC keeps DST from skipping a day. */
+export function nextDays(start: string, count: number): string[] {
+  const first = Date.parse(`${start}T00:00:00Z`);
+  return Array.from({ length: count }, (_, i) => new Date(first + i * 86_400_000).toISOString().slice(0, 10));
+}
+
 /** Today's date as "YYYY-MM-DD" in UTC, matching the server's notion of today. */
 export function todayUtc(): string {
   return new Date().toISOString().slice(0, 10);

@@ -17,7 +17,7 @@ export function PublicToolList({ preloaded }: { preloaded: Preloaded<typeof api.
     <ul className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
       {tools.map((tool, index) => (
         // The public query has no ids on purpose, so the position is the key.
-        <li key={index} className="flex items-center justify-between gap-3 rounded-xl border border-line bg-white px-4 py-3">
+        <li key={index} className="flex items-center justify-between gap-3 rounded-xl border border-line bg-card px-4 py-3">
           <span className="truncate font-medium">{tool.name}</span>
           <Badge>{categoryLabel(tool.category)}</Badge>
         </li>

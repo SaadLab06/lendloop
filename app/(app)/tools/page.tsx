@@ -16,7 +16,7 @@ export default function BrowsePage() {
 
   return (
     <>
-      <PageHeader title="All tools" description="Everything your neighbors are lending, with what is free right now." />
+      <PageHeader title="Browse" description="Everything your neighbors are lending, with what is free right now" />
 
       <div role="group" aria-label="Filter by category" className="-mx-1 mb-6 flex flex-wrap gap-2">
         <FilterChip label="All" active={category === undefined} onClick={() => setCategory(undefined)} />
@@ -48,7 +48,7 @@ function FilterChip({ label, active, onClick }: { label: string; active: boolean
       type="button"
       onClick={onClick}
       aria-pressed={active}
-      className={`rounded-full border px-3 py-1 text-sm ${active ? "border-brand bg-brand text-white" : "border-line bg-white text-ink hover:bg-stone-50"}`}
+      className={`rounded-lg border px-3 py-1.5 text-sm transition-colors duration-150 ease-out ${active ? "border-ink bg-ink text-paper" : "border-line bg-card text-ink hover:bg-raised"}`}
     >
       {label}
     </button>

@@ -32,7 +32,7 @@ export default function IncomingRequestsPage() {
 function LoanList({ title, loans, empty }: { title: string; loans: LoanView[]; empty: string }) {
   return (
     <section>
-      <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-muted">{title}</h2>
+      <h2 className="mb-3 font-medium">{title}</h2>
       {loans.length === 0 ? (
         <p className="text-sm text-muted">{empty}</p>
       ) : (

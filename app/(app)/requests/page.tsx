@@ -13,7 +13,7 @@ export default function MyRequestsPage() {
 
   return (
     <>
-      <PageHeader title="My requests" description="Tools you asked to borrow, and where each request stands." />
+      <PageHeader title="My requests" description="Tools you asked to borrow, and where each request stands" />
       {loans === undefined ? (
         <LoadingCards />
       ) : loans.length === 0 ? (
