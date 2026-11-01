@@ -1,0 +1,9 @@
+node_modules
+.next
+.git
+.clerk
+.env*
+coverage
+n8n
+deploy
+scripts
