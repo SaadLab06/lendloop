@@ -24,8 +24,15 @@ done
 
 run() { if [ -n "${SSH_HOST:-}" ]; then ssh "$SSH_HOST" "$@"; else bash -c "$*"; fi; }
 
+REMOTE_DIR=/tmp/lendloop-n8n-import
 WORK=$(mktemp -d)
-trap 'rm -rf "$WORK"' EXIT
+# Remove every copy of the credentials file, even if a step below fails.
+cleanup() {
+  rm -rf "$WORK"
+  run "docker exec $N8N_CONTAINER rm -rf $REMOTE_DIR" >/dev/null 2>&1 || true
+  if [ -n "${SSH_HOST:-}" ]; then ssh "$SSH_HOST" "rm -rf $REMOTE_DIR" >/dev/null 2>&1 || true; fi
+}
+trap cleanup EXIT
 mkdir -p "$WORK/workflows"
 
 # Credentials are matched to the workflows by name and type (jwtAuth).
@@ -52,7 +59,6 @@ for file in workflows/*.json; do
   sed "s|http://host.docker.internal:3211|${CONVEX_SITE_URL}|g" "$file" > "$WORK/$file"
 done
 
-REMOTE_DIR=/tmp/lendloop-n8n-import
 if [ -n "${SSH_HOST:-}" ]; then
   ssh "$SSH_HOST" "rm -rf $REMOTE_DIR && mkdir -m 700 $REMOTE_DIR"
   scp -q -r "$WORK/credentials.json" "$WORK/workflows" "$SSH_HOST:$REMOTE_DIR/"
@@ -64,11 +70,10 @@ fi
 run "docker exec $N8N_CONTAINER rm -rf $REMOTE_DIR && docker cp $SRC $N8N_CONTAINER:$REMOTE_DIR"
 run "docker exec $N8N_CONTAINER n8n import:credentials --input=$REMOTE_DIR/credentials.json"
 run "docker exec $N8N_CONTAINER n8n import:workflow --separate --input=$REMOTE_DIR/workflows"
-run "docker exec $N8N_CONTAINER rm -rf $REMOTE_DIR"
-if [ -n "${SSH_HOST:-}" ]; then ssh "$SSH_HOST" "rm -rf $REMOTE_DIR"; fi
 
+# import:workflow unpublishes the workflows it overwrites, so publish all three again.
 for id in lendLoopErrors01 lendLoopNotify01 lendLoopRemind01; do
-  run "docker exec $N8N_CONTAINER n8n publish:workflow --id=$id" | grep -i "publish" || true
+  run "docker exec $N8N_CONTAINER n8n publish:workflow --id=$id"
 done
 
 if [ "${RESTART:-1}" = "1" ]; then

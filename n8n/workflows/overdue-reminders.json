@@ -8,10 +8,18 @@
       "name": "Every day at 08:00 UTC",
       "type": "n8n-nodes-base.scheduleTrigger",
       "typeVersion": 1.2,
-      "position": [0, 0],
+      "position": [
+        0,
+        0
+      ],
       "parameters": {
         "rule": {
-          "interval": [{ "field": "cronExpression", "expression": "0 8 * * *" }]
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 8 * * *"
+            }
+          ]
         }
       }
     },
@@ -20,7 +28,10 @@
       "name": "Run now (manual test)",
       "type": "n8n-nodes-base.manualTrigger",
       "typeVersion": 1,
-      "position": [0, 180],
+      "position": [
+        0,
+        180
+      ],
       "parameters": {},
       "notes": "Lets you run the same flow on demand from the editor or with n8n execute --id."
     },
@@ -29,7 +40,10 @@
       "name": "Config",
       "type": "n8n-nodes-base.set",
       "typeVersion": 3.4,
-      "position": [220, 0],
+      "position": [
+        220,
+        0
+      ],
       "parameters": {
         "assignments": {
           "assignments": [
@@ -50,7 +64,10 @@
       "name": "Sign overdue request",
       "type": "n8n-nodes-base.jwt",
       "typeVersion": 1,
-      "position": [440, 0],
+      "position": [
+        440,
+        0
+      ],
       "parameters": {
         "operation": "sign",
         "useJson": true,
@@ -66,7 +83,10 @@
       "name": "Fetch overdue loans",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [660, 0],
+      "position": [
+        660,
+        0
+      ],
       "retryOnFail": true,
       "maxTries": 3,
       "waitBetweenTries": 5000,
@@ -76,9 +96,16 @@
         "sendHeaders": true,
         "specifyHeaders": "keypair",
         "headerParameters": {
-          "parameters": [{ "name": "Authorization", "value": "=Bearer {{ $json.token }}" }]
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $json.token }}"
+            }
+          ]
         },
-        "options": { "timeout": 15000 }
+        "options": {
+          "timeout": 15000
+        }
       },
       "notes": "Returns overdue loans grouped by borrower, leaving out loans already reminded today."
     },
@@ -87,7 +114,10 @@
       "name": "One item per borrower",
       "type": "n8n-nodes-base.splitOut",
       "typeVersion": 1,
-      "position": [880, 0],
+      "position": [
+        880,
+        0
+      ],
       "parameters": {
         "fieldToSplitOut": "borrowers",
         "include": "noOtherFields",
@@ -100,10 +130,13 @@
       "name": "Send reminder (mock)",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [1100, 0],
+      "position": [
+        1100,
+        0
+      ],
       "parameters": {
         "mode": "runOnceForEachItem",
-        "jsCode": "// Mock reminder: one message per borrower listing every overdue tool, logged instead of sent.\nconst borrower = $json;\n// The date Convex used for \"overdue\"; the write-back keys reminders on it.\nconst date = $('Fetch overdue loans').first().json.date;\nconst lines = borrower.loans.map(\n  (loan) => `- ${loan.toolName}: due ${loan.endDate} (${loan.daysOverdue} day${loan.daysOverdue === 1 ? '' : 's'} overdue)`,\n);\nconst message = {\n  channel: 'mock-email',\n  to: borrower.email ?? '(no email on file)',\n  subject: 'Reminder: please return what you borrowed',\n  text: `Hi ${borrower.firstName}, these are past their return date:\\n${lines.join('\\n')}\\nPlease return them or message the lender.`,\n};\nconsole.log('[LendLoop mock reminder]', JSON.stringify(message));\nreturn { json: { ...message, date, loanIds: borrower.loans.map((loan) => loan.loanId) } };"
+        "jsCode": "// Mock reminder: one message per borrower listing every overdue tool, logged instead of sent.\nconst borrower = $json;\n// The date Convex used for \"overdue\"; the write-back keys reminders on it.\nconst date = $('Fetch overdue loans').first().json.date;\nconst lines = borrower.loans.map(\n  (loan) => `- ${loan.toolName}: due ${loan.endDate} (${loan.daysOverdue} day${loan.daysOverdue === 1 ? '' : 's'} overdue)`,\n);\nconst message = {\n  channel: 'mock-email',\n  to: borrower.email,\n  subject: 'Reminder: please return what you borrowed',\n  text: `Hi ${borrower.firstName}, these are past their return date:\\n${lines.join('\\n')}\\nPlease return them or message the lender.`,\n};\n// No address means nothing can be sent: record that as a failed reminder instead of pretending.\nconst status = borrower.email ? 'sent' : 'failed';\nconst masked = String(borrower.email ?? 'none').replace(/^(.).*(@.*)$/, '$1***$2');\nconsole.log('[LendLoop mock reminder]', status, JSON.stringify({ ...message, to: masked }));\nreturn { json: { ...message, status, date, loanIds: borrower.loans.map((loan) => loan.loanId) } };"
       }
     },
     {
@@ -111,11 +144,14 @@
       "name": "Sign reminder write-back",
       "type": "n8n-nodes-base.jwt",
       "typeVersion": 1,
-      "position": [1320, 0],
+      "position": [
+        1320,
+        0
+      ],
       "parameters": {
         "operation": "sign",
         "useJson": true,
-        "claimsJson": "={\n  \"iss\": \"lendloop-n8n\",\n  \"aud\": \"lendloop-convex\",\n  \"scope\": \"reminders\",\n  \"jti\": \"{{ $execution.id }}-reminder-{{ $itemIndex }}\",\n  \"exp\": {{ Math.floor(Date.now() / 1000) + 300 }},\n  \"date\": \"{{ $json.date }}\",\n  \"loanIds\": {{ JSON.stringify($json.loanIds) }},\n  \"status\": \"sent\"\n}",
+        "claimsJson": "={\n  \"iss\": \"lendloop-n8n\",\n  \"aud\": \"lendloop-convex\",\n  \"scope\": \"reminders\",\n  \"jti\": \"{{ $execution.id }}-reminder-{{ $itemIndex }}\",\n  \"exp\": {{ Math.floor(Date.now() / 1000) + 300 }},\n  \"date\": \"{{ $json.date }}\",\n  \"loanIds\": {{ JSON.stringify($json.loanIds) }},\n  \"status\": \"{{ $json.status }}\"\n}",
         "options": {}
       },
       "credentials": {
@@ -127,7 +163,10 @@
       "name": "Record reminders in Convex",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [1540, 0],
+      "position": [
+        1540,
+        0
+      ],
       "retryOnFail": true,
       "maxTries": 3,
       "waitBetweenTries": 5000,
@@ -137,37 +176,108 @@
         "sendHeaders": true,
         "specifyHeaders": "keypair",
         "headerParameters": {
-          "parameters": [{ "name": "Authorization", "value": "=Bearer {{ $json.token }}" }]
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $json.token }}"
+            }
+          ]
         },
-        "options": { "timeout": 10000 }
+        "options": {
+          "timeout": 10000
+        }
       },
       "notes": "Idempotent on loanId:date, so a retried call or a second run on the same day creates no duplicates."
     }
   ],
   "connections": {
     "Every day at 08:00 UTC": {
-      "main": [[{ "node": "Config", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "Config",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Run now (manual test)": {
-      "main": [[{ "node": "Config", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "Config",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Config": {
-      "main": [[{ "node": "Sign overdue request", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "Sign overdue request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Sign overdue request": {
-      "main": [[{ "node": "Fetch overdue loans", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "Fetch overdue loans",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Fetch overdue loans": {
-      "main": [[{ "node": "One item per borrower", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "One item per borrower",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "One item per borrower": {
-      "main": [[{ "node": "Send reminder (mock)", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "Send reminder (mock)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Send reminder (mock)": {
-      "main": [[{ "node": "Sign reminder write-back", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "Sign reminder write-back",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Sign reminder write-back": {
-      "main": [[{ "node": "Record reminders in Convex", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "Record reminders in Convex",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     }
   },
   "settings": {
@@ -175,11 +285,13 @@
     "timezone": "UTC",
     "errorWorkflow": "lendLoopErrors01",
     "saveDataErrorExecution": "all",
-    "saveDataSuccessExecution": "all",
+    "saveDataSuccessExecution": "none",
     "saveManualExecutions": true,
     "callerPolicy": "workflowsFromSameOwner"
   },
   "pinData": {},
-  "meta": { "templateCredsSetupCompleted": true },
+  "meta": {
+    "templateCredsSetupCompleted": true
+  },
   "tags": []
 }

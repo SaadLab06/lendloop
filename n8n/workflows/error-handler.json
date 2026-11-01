@@ -8,7 +8,10 @@
       "name": "Error Trigger",
       "type": "n8n-nodes-base.errorTrigger",
       "typeVersion": 1,
-      "position": [0, 0],
+      "position": [
+        0,
+        0
+      ],
       "parameters": {},
       "notes": "Runs when a workflow that names this one as its error workflow fails (after its own retries)."
     },
@@ -17,7 +20,10 @@
       "name": "Config",
       "type": "n8n-nodes-base.set",
       "typeVersion": 3.4,
-      "position": [220, 0],
+      "position": [
+        220,
+        0
+      ],
       "parameters": {
         "assignments": {
           "assignments": [
@@ -39,7 +45,10 @@
       "name": "Sign failure report",
       "type": "n8n-nodes-base.jwt",
       "typeVersion": 1,
-      "position": [440, 0],
+      "position": [
+        440,
+        0
+      ],
       "parameters": {
         "operation": "sign",
         "useJson": true,
@@ -55,7 +64,10 @@
       "name": "Report failure to Convex",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [660, 0],
+      "position": [
+        660,
+        0
+      ],
       "retryOnFail": true,
       "maxTries": 5,
       "waitBetweenTries": 5000,
@@ -65,22 +77,53 @@
         "sendHeaders": true,
         "specifyHeaders": "keypair",
         "headerParameters": {
-          "parameters": [{ "name": "Authorization", "value": "=Bearer {{ $json.token }}" }]
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $json.token }}"
+            }
+          ]
         },
-        "options": { "timeout": 10000 }
+        "options": {
+          "timeout": 10000
+        }
       },
       "notes": "Shows the failure in the LendLoop admin view. If Convex itself is down, this run fails too and stays visible in the n8n executions list."
     }
   ],
   "connections": {
     "Error Trigger": {
-      "main": [[{ "node": "Config", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "Config",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Config": {
-      "main": [[{ "node": "Sign failure report", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "Sign failure report",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Sign failure report": {
-      "main": [[{ "node": "Report failure to Convex", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "Report failure to Convex",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     }
   },
   "settings": {
@@ -92,6 +135,8 @@
     "callerPolicy": "workflowsFromSameOwner"
   },
   "pinData": {},
-  "meta": { "templateCredsSetupCompleted": true },
+  "meta": {
+    "templateCredsSetupCompleted": true
+  },
   "tags": []
 }
