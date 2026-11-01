@@ -1,0 +1,81 @@
+# LendLoop on a single Docker host: self-hosted Convex (backend + dashboard) and the Next.js app.
+# Ports are bound to the LAN address only, because Docker-published ports bypass the host firewall.
+# Public traffic arrives through a Cloudflare Tunnel to the existing Traefik proxy, which routes
+# by hostname using the labels below. Values come from .env next to this file (see .env.example).
+services:
+  convex:
+    image: ghcr.io/convex/convex-backend@sha256:207cf95def42f01614b6e3af0af5c20d0dcaa5ff2adf258ee7bc9555576644fa
+    restart: unless-stopped
+    stop_grace_period: 10s
+    stop_signal: SIGINT
+    ports:
+      - "${LAN_IP}:3210:3210" # client API and websocket
+      - "${LAN_IP}:3211:3211" # HTTP actions (the /n8n/* endpoints)
+    volumes:
+      - ./convex-data:/convex/data
+    environment:
+      - INSTANCE_NAME=lendloop
+      - INSTANCE_SECRET=${CONVEX_INSTANCE_SECRET}
+      - CONVEX_CLOUD_ORIGIN=${CONVEX_CLOUD_ORIGIN}
+      - CONVEX_SITE_ORIGIN=${CONVEX_SITE_ORIGIN}
+      - DISABLE_BEACON=true
+      - DOCUMENT_RETENTION_DELAY=172800
+      - RUST_LOG=info
+    healthcheck:
+      test: curl -f http://localhost:3210/version
+      interval: 5s
+      start_period: 10s
+    networks: [default, coolify]
+    labels:
+      - traefik.enable=true
+      - traefik.docker.network=coolify
+      - traefik.http.routers.lendloop-api.rule=Host(`lendloop-api.saadlabri.com`)
+      - traefik.http.routers.lendloop-api.entrypoints=http
+      - traefik.http.routers.lendloop-api.service=lendloop-api
+      - traefik.http.services.lendloop-api.loadbalancer.server.port=3210
+      - traefik.http.routers.lendloop-site.rule=Host(`lendloop-site.saadlabri.com`)
+      - traefik.http.routers.lendloop-site.entrypoints=http
+      - traefik.http.routers.lendloop-site.service=lendloop-site
+      - traefik.http.services.lendloop-site.loadbalancer.server.port=3211
+
+  # Convex dashboard, LAN only (never routed through the tunnel). Log in with the admin key.
+  dashboard:
+    image: ghcr.io/convex/convex-dashboard@sha256:a55bf8abca1332f787bc4d4a79850182175027be7b70aa230be4389a1d3268e2
+    restart: unless-stopped
+    stop_grace_period: 10s
+    stop_signal: SIGINT
+    ports:
+      - "${LAN_IP}:6791:6791"
+    environment:
+      - NEXT_PUBLIC_DEPLOYMENT_URL=http://${LAN_IP}:3210
+    depends_on:
+      convex:
+        condition: service_healthy
+
+  app:
+    build:
+      context: ./app
+      args:
+        NEXT_PUBLIC_CONVEX_URL: ${NEXT_PUBLIC_CONVEX_URL}
+        NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: ${NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY}
+    image: lendloop-app:latest
+    restart: unless-stopped
+    ports:
+      - "${LAN_IP}:3300:3000"
+    environment:
+      - CLERK_SECRET_KEY=${CLERK_SECRET_KEY}
+    depends_on:
+      convex:
+        condition: service_healthy
+    networks: [default, coolify]
+    labels:
+      - traefik.enable=true
+      - traefik.docker.network=coolify
+      - traefik.http.routers.lendloop-app.rule=Host(`lendloop.saadlabri.com`)
+      - traefik.http.routers.lendloop-app.entrypoints=http
+      - traefik.http.routers.lendloop-app.service=lendloop-app
+      - traefik.http.services.lendloop-app.loadbalancer.server.port=3000
+
+networks:
+  coolify:
+    external: true
