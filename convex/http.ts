@@ -2,9 +2,11 @@
 // signed with N8N_API_SECRET (a different secret from the one Convex uses to sign webhooks).
 // The token's claims are the request: we never read a body that the signature does not cover.
 import { httpRouter } from "convex/server";
+import { ConvexError } from "convex/values";
 import { internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
 import { httpAction, type ActionCtx } from "./_generated/server";
+import { todayIso } from "./lib/dates";
 import { JwsError, verifyJws, type Claims } from "./lib/jws";
 
 const TOKEN_MAX_LIFETIME_SECONDS = 300;
@@ -49,9 +51,13 @@ function n8nEndpoint(scope: string, handler: (ctx: ActionCtx, claims: Claims) =>
       const result = await handler(ctx, claims);
       return result === null ? json({ error: "Not found" }, 404) : json(result, 200);
     } catch (error) {
-      // Argument validators on the internal functions reject claims with the wrong shape.
       console.error(`Call to ${scope} failed (jti ${claims.jti}):`, error);
-      return json({ error: "Bad request" }, 400);
+      // Claims with the wrong shape are rejected by the internal functions' argument validators
+      // or by a ConvexError: that is the caller's fault (400). Anything else is ours (500).
+      const message = error instanceof Error ? error.message : String(error);
+      // (Convex reports validator failures as "ArgumentValidationError"; convex-test as "Validator error".)
+      const badInput = error instanceof ConvexError || /ArgumentValidationError|Validator error/i.test(message);
+      return badInput ? json({ error: "Bad request" }, 400) : json({ error: "Internal error" }, 500);
     }
   });
 }
@@ -84,7 +90,7 @@ http.route({
 http.route({
   path: "/n8n/overdue-loans",
   method: "GET",
-  handler: n8nEndpoint("overdue-loans", (ctx) => ctx.runQuery(internal.n8n.overdueLoans, {})),
+  handler: n8nEndpoint("overdue-loans", (ctx) => ctx.runQuery(internal.n8n.overdueLoans, { date: todayIso() })),
 });
 
 http.route({

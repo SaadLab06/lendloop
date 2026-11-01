@@ -16,7 +16,7 @@ test("the public list works signed out and returns only name and category", asyn
     description: "Two burners. Gas canister not included.",
   });
 
-  const tools = await t.query(api.tools.listPublic, {});
+  const tools = await t.query(api.tools.listPublic, { today: days(0) });
 
   expect(tools).toHaveLength(2);
   for (const tool of tools) {
@@ -42,14 +42,19 @@ test("the public list leaves out tools that are on loan or removed", async () =>
   await alice.as.mutation(api.loans.approve, { loanId });
   await alice.as.mutation(api.tools.remove, { toolId: ladder });
 
-  const names = (await t.query(api.tools.listPublic, {})).map((tool) => tool.name);
+  const names = (await t.query(api.tools.listPublic, { today: days(0) })).map((tool) => tool.name);
   expect(names).toEqual(["Hedge trimmer"]);
+});
+
+test("queries take today as a validated argument instead of reading the clock", async () => {
+  const t = setupTest();
+  await expect(t.query(api.tools.listPublic, { today: "tomorrow" })).rejects.toThrow(/valid day/);
 });
 
 test("everything except the public list requires sign-in", async () => {
   const t = setupTest();
-  await expect(t.query(api.tools.list, {})).rejects.toThrow(/sign in/);
-  await expect(t.query(api.loans.myRequests, {})).rejects.toThrow(/sign in/);
+  await expect(t.query(api.tools.list, { today: days(0) })).rejects.toThrow(/sign in/);
+  await expect(t.query(api.loans.myRequests, { today: days(0) })).rejects.toThrow(/sign in/);
   await expect(
     t.mutation(api.tools.create, { name: "Saw", category: "hand_tools", condition: "good", description: "Sharp." }),
   ).rejects.toThrow(/sign in/);

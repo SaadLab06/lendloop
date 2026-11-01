@@ -5,6 +5,7 @@ import { internal } from "./_generated/api";
 import { mutation, query } from "./_generated/server";
 import { requireAdmin } from "./lib/auth";
 import { roleValidator } from "./lib/constants";
+import { assertIsoDate } from "./lib/dates";
 import { describeLoan } from "./lib/loans";
 
 export const listUsers = query({
@@ -23,11 +24,11 @@ export const listUsers = query({
 });
 
 export const listLoans = query({
-  args: {},
-  handler: async (ctx) => {
+  args: { today: v.string() },
+  handler: async (ctx, { today }) => {
     await requireAdmin(ctx);
     const loans = await ctx.db.query("loans").order("desc").take(200);
-    return await Promise.all(loans.map((loan) => describeLoan(ctx, loan)));
+    return await Promise.all(loans.map((loan) => describeLoan(ctx, loan, assertIsoDate(today, "today"))));
   },
 });
 
@@ -104,7 +105,12 @@ export const retryEvent = mutation({
     if (event === null || event.state !== "failed") {
       throw new ConvexError("Only failed events can be retried.");
     }
-    await ctx.db.patch("outbox", outboxId, { state: "pending", attempts: 0, lastError: undefined });
+    await ctx.db.patch("outbox", outboxId, {
+      state: "pending",
+      attempts: 0,
+      lastError: undefined,
+      nextAttemptAt: Date.now(),
+    });
     await ctx.scheduler.runAfter(0, internal.outbox.deliver, { outboxId });
   },
 });

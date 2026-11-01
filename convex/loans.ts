@@ -3,10 +3,10 @@ import type { Id } from "./_generated/dataModel";
 import { mutation, query, type QueryCtx } from "./_generated/server";
 import { assertBorrower, assertLender, isAdmin, requireUser } from "./lib/auth";
 import { LIMITS } from "./lib/constants";
-import { assertValidLoanRange, todayIso } from "./lib/dates";
+import { assertIsoDate, assertValidLoanRange, rangesOverlap, todayIso } from "./lib/dates";
 import { assertNoApprovedOverlap, changeLoanStatus, describeLoan } from "./lib/loans";
+import { enqueueLoanEvent } from "./lib/outbox";
 import { cleanText } from "./lib/validation";
-import { enqueueLoanEvent } from "./outbox";
 
 async function getLoan(ctx: QueryCtx, loanId: Id<"loans">) {
   const loan = await ctx.db.get("loans", loanId);
@@ -30,9 +30,10 @@ export const request = mutation({
     if (tool.ownerId === user._id) {
       throw new ConvexError("You cannot borrow your own tool.");
     }
+    const today = todayIso();
     const range = { startDate, endDate };
-    assertValidLoanRange(range, todayIso());
-    await assertNoApprovedOverlap(ctx, toolId, range);
+    assertValidLoanRange(range, today);
+    await assertNoApprovedOverlap(ctx, toolId, range, today);
 
     const pending = await ctx.db
       .query("loans")
@@ -64,7 +65,8 @@ export const approve = mutation({
     const loan = await getLoan(ctx, loanId);
     assertLender(user, loan);
     if (loan.status !== "pending") throw new ConvexError("Only pending requests can be approved.");
-    if (loan.startDate < todayIso()) {
+    const today = todayIso();
+    if (loan.startDate < today) {
       throw new ConvexError("The start date has passed. Ask the borrower for new dates.");
     }
     const tool = await ctx.db.get("tools", loan.toolId);
@@ -72,8 +74,21 @@ export const approve = mutation({
       throw new ConvexError("This tool is no longer listed.");
     }
     // Checked again here: two pending requests may overlap, and only one can win.
-    await assertNoApprovedOverlap(ctx, loan.toolId, loan);
-    await changeLoanStatus(ctx, loan, "approved", { decidedAt: Date.now() });
+    await assertNoApprovedOverlap(ctx, loan.toolId, loan, today);
+    const now = Date.now();
+    await changeLoanStatus(ctx, loan, "approved", { decidedAt: now });
+
+    // Other requests for the same days can no longer be approved, so answer them now
+    // (each borrower gets a "declined" notification) instead of leaving them pending.
+    const pending = await ctx.db
+      .query("loans")
+      .withIndex("by_tool_status", (q) => q.eq("toolId", loan.toolId).eq("status", "pending"))
+      .collect();
+    for (const other of pending) {
+      if (rangesOverlap(other, loan)) {
+        await changeLoanStatus(ctx, other, "declined", { decidedAt: now });
+      }
+    }
   },
 });
 
@@ -114,28 +129,28 @@ export const markReturned = mutation({
 
 /** Requests the signed-in user made as a borrower. */
 export const myRequests = query({
-  args: {},
-  handler: async (ctx) => {
+  args: { today: v.string() },
+  handler: async (ctx, { today }) => {
     const user = await requireUser(ctx);
     const loans = await ctx.db
       .query("loans")
       .withIndex("by_borrower", (q) => q.eq("borrowerId", user._id))
       .order("desc")
       .take(100);
-    return await Promise.all(loans.map((loan) => describeLoan(ctx, loan)));
+    return await Promise.all(loans.map((loan) => describeLoan(ctx, loan, assertIsoDate(today, "today"))));
   },
 });
 
 /** Requests for the signed-in user's tools. */
 export const incoming = query({
-  args: {},
-  handler: async (ctx) => {
+  args: { today: v.string() },
+  handler: async (ctx, { today }) => {
     const user = await requireUser(ctx);
     const loans = await ctx.db
       .query("loans")
       .withIndex("by_lender", (q) => q.eq("lenderId", user._id))
       .order("desc")
       .take(100);
-    return await Promise.all(loans.map((loan) => describeLoan(ctx, loan)));
+    return await Promise.all(loans.map((loan) => describeLoan(ctx, loan, assertIsoDate(today, "today"))));
   },
 });

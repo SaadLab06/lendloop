@@ -2,12 +2,13 @@
 
 import { useMutation, useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
+import { todayUtc } from "@/lib/format";
 import { LoanCard, type LoanView } from "@/components/LoanCard";
 import { Button, EmptyState, ErrorText, LoadingCards, PageHeader } from "@/components/ui";
 import { useSubmit } from "@/lib/useSubmit";
 
 export default function IncomingRequestsPage() {
-  const loans = useQuery(api.loans.incoming);
+  const loans = useQuery(api.loans.incoming, { today: todayUtc() });
   const open = loans?.filter((loan) => loan.status === "pending" || loan.status === "approved") ?? [];
   const closed = loans?.filter((loan) => loan.status !== "pending" && loan.status !== "approved") ?? [];
 

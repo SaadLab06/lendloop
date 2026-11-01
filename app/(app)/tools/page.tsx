@@ -3,6 +3,7 @@
 import { useQuery } from "convex/react";
 import { useState } from "react";
 import { api } from "@/convex/_generated/api";
+import { todayUtc } from "@/lib/format";
 import { CATEGORY_LABELS, type Category } from "@/convex/lib/constants";
 import { ToolCard } from "@/components/ToolCard";
 import { EmptyState, LoadingCards, PageHeader } from "@/components/ui";
@@ -11,7 +12,7 @@ const CATEGORIES = Object.entries(CATEGORY_LABELS) as [Category, string][];
 
 export default function BrowsePage() {
   const [category, setCategory] = useState<Category | undefined>(undefined);
-  const tools = useQuery(api.tools.list, { category });
+  const tools = useQuery(api.tools.list, { category, today: todayUtc() });
 
   return (
     <>

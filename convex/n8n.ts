@@ -1,11 +1,11 @@
 // Internal functions behind the signed /n8n/* HTTP endpoints in http.ts.
 // They are internal, so only those endpoints (after checking the signature) can call them,
 // and each one returns only the fields n8n needs for one job.
-import { v } from "convex/values";
+import { ConvexError, v } from "convex/values";
 import type { Doc, Id } from "./_generated/dataModel";
 import { internalMutation, internalQuery, type QueryCtx } from "./_generated/server";
 import type { LoanStatus } from "./lib/constants";
-import { daysBetween, isIsoDate, todayIso } from "./lib/dates";
+import { assertIsoDate, daysBetween, isIsoDate } from "./lib/dates";
 import { firstName } from "./lib/loans";
 
 const MAX_BATCH = 100;
@@ -94,9 +94,9 @@ function reminderKey(loanId: Id<"loans">, date: string): string {
  * Loans already reminded today are left out, so a second run on the same day sends nothing.
  */
 export const overdueLoans = internalQuery({
-  args: {},
-  handler: async (ctx) => {
-    const date = todayIso();
+  args: { date: v.string() }, // today, passed in by http.ts (see assertIsoDate for why)
+  handler: async (ctx, args) => {
+    const date = assertIsoDate(args.date);
     const loans = await ctx.db
       .query("loans")
       .withIndex("by_status_end_date", (q) => q.eq("status", "approved").lt("endDate", date))
@@ -133,7 +133,7 @@ export const recordReminders = internalMutation({
   },
   handler: async (ctx, { date, loanIds, status }) => {
     if (!isIsoDate(date) || loanIds.length === 0 || loanIds.length > MAX_BATCH) {
-      throw new Error("Invalid reminder batch");
+      throw new ConvexError("Invalid reminder batch");
     }
     let created = 0;
     let skipped = 0;
@@ -164,14 +164,16 @@ export const recordFailure = internalMutation({
     node: v.optional(v.string()),
     message: v.string(),
   },
-  handler: async (ctx, { executionId, workflow, node, message }) => {
+  handler: async (ctx, args) => {
+    const executionId = args.executionId.slice(0, 100);
     const existing = await ctx.db
       .query("automationFailures")
       .withIndex("by_execution_id", (q) => q.eq("executionId", executionId))
       .unique();
     if (existing !== null) return { created: false };
+    const { workflow, node, message } = args;
     await ctx.db.insert("automationFailures", {
-      executionId: executionId.slice(0, 100),
+      executionId,
       workflow: workflow.slice(0, 200),
       node: node?.slice(0, 200),
       message: message.slice(0, 1000),

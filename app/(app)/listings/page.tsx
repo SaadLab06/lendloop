@@ -3,13 +3,14 @@
 import { useMutation, useQuery } from "convex/react";
 import { useState } from "react";
 import { api } from "@/convex/_generated/api";
+import { todayUtc } from "@/lib/format";
 import { ToolCard, type ToolView } from "@/components/ToolCard";
 import { ToolForm } from "@/components/ToolForm";
 import { Button, Card, EmptyState, ErrorText, LoadingCards, PageHeader } from "@/components/ui";
 import { useSubmit } from "@/lib/useSubmit";
 
 export default function MyListingsPage() {
-  const tools = useQuery(api.tools.mine);
+  const tools = useQuery(api.tools.mine, { today: todayUtc() });
   const [adding, setAdding] = useState(false);
   const create = useSubmit(useMutation(api.tools.create));
 

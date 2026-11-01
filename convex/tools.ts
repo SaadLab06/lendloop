@@ -3,7 +3,7 @@ import type { Doc } from "./_generated/dataModel";
 import { mutation, query, type QueryCtx } from "./_generated/server";
 import { assertToolOwner, isAdmin, requireUser } from "./lib/auth";
 import { categoryValidator, conditionValidator, LIMITS } from "./lib/constants";
-import { todayIso } from "./lib/dates";
+import { assertIsoDate } from "./lib/dates";
 import { approvedLoans, changeLoanStatus, firstName, isOnLoan } from "./lib/loans";
 import { cleanText } from "./lib/validation";
 
@@ -15,26 +15,23 @@ const PUBLIC_LIST_LIMIT = 100;
  * The `returns` validator makes Convex reject the response if any other field slips in.
  */
 export const listPublic = query({
-  args: {},
+  args: { today: v.string() },
   returns: v.array(v.object({ name: v.string(), category: categoryValidator })),
-  handler: async (ctx) => {
-    const today = todayIso();
-    const tools = await ctx.db
-      .query("tools")
-      .withIndex("by_status_category", (q) => q.eq("status", "listed"))
-      .take(PUBLIC_LIST_LIMIT);
+  handler: async (ctx, args) => {
+    const today = assertIsoDate(args.today, "today");
     const available = [];
-    for (const tool of tools) {
+    const listed = ctx.db.query("tools").withIndex("by_status_category", (q) => q.eq("status", "listed"));
+    for await (const tool of listed) {
       if (!(await isOnLoan(ctx, tool._id, today))) {
         available.push({ name: tool.name, category: tool.category });
+        if (available.length === PUBLIC_LIST_LIMIT) break;
       }
     }
     return available;
   },
 });
 
-async function withAvailability(ctx: QueryCtx, tools: Doc<"tools">[], viewer: Doc<"users">) {
-  const today = todayIso();
+async function withAvailability(ctx: QueryCtx, tools: Doc<"tools">[], viewer: Doc<"users">, today: string) {
   return await Promise.all(
     tools.map(async (tool) => {
       const [owner, loans] = await Promise.all([ctx.db.get("users", tool.ownerId), approvedLoans(ctx, tool._id)]);
@@ -45,10 +42,9 @@ async function withAvailability(ctx: QueryCtx, tools: Doc<"tools">[], viewer: Do
         condition: tool.condition,
         description: tool.description,
         available: !loans.some((loan) => loan.startDate <= today),
-        // Upcoming approved dates, so borrowers can pick free days before requesting.
+        // Approved dates (overdue ones included), so borrowers can pick free days before requesting.
         bookings: loans
-          .filter((loan) => loan.endDate >= today)
-          .map((loan) => ({ startDate: loan.startDate, endDate: loan.endDate }))
+          .map((loan) => ({ startDate: loan.startDate, endDate: loan.endDate, overdue: loan.endDate < today }))
           .sort((a, b) => a.startDate.localeCompare(b.startDate)),
         isMine: tool.ownerId === viewer._id,
         // Other members see a first name and the trusted badge, never an email.
@@ -61,8 +57,8 @@ async function withAvailability(ctx: QueryCtx, tools: Doc<"tools">[], viewer: Do
 
 /** All listed tools with availability, optionally filtered by category. Signed-in users only. */
 export const list = query({
-  args: { category: v.optional(categoryValidator) },
-  handler: async (ctx, { category }) => {
+  args: { category: v.optional(categoryValidator), today: v.string() },
+  handler: async (ctx, { category, today }) => {
     const viewer = await requireUser(ctx);
     const tools = await ctx.db
       .query("tools")
@@ -70,20 +66,20 @@ export const list = query({
         category === undefined ? q.eq("status", "listed") : q.eq("status", "listed").eq("category", category),
       )
       .take(200);
-    return await withAvailability(ctx, tools, viewer);
+    return await withAvailability(ctx, tools, viewer, assertIsoDate(today, "today"));
   },
 });
 
 /** The signed-in user's own listings. */
 export const mine = query({
-  args: {},
-  handler: async (ctx) => {
+  args: { today: v.string() },
+  handler: async (ctx, { today }) => {
     const viewer = await requireUser(ctx);
     const tools = await ctx.db
       .query("tools")
       .withIndex("by_owner_status", (q) => q.eq("ownerId", viewer._id).eq("status", "listed"))
       .collect();
-    return await withAvailability(ctx, tools, viewer);
+    return await withAvailability(ctx, tools, viewer, assertIsoDate(today, "today"));
   },
 });
 

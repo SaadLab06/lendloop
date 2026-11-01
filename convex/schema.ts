@@ -61,9 +61,12 @@ export default defineSchema({
     status: loanStatusValidator,
     state: v.union(v.literal("pending"), v.literal("delivered"), v.literal("failed")),
     attempts: v.number(),
+    nextAttemptAt: v.number(), // when the next delivery is due; lets the cron spot stuck rows
     lastError: v.optional(v.string()),
     deliveredAt: v.optional(v.number()),
-  }).index("by_state", ["state"]),
+  })
+    .index("by_state", ["state"])
+    .index("by_state_next_attempt", ["state", "nextAttemptAt"]),
 
   // What n8n did for a loan: notifications (keyed by event id) and
   // overdue reminders (keyed by "loanId:YYYY-MM-DD"). The unique key makes write-backs idempotent.

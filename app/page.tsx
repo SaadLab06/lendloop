@@ -3,13 +3,18 @@ import { api } from "@/convex/_generated/api";
 import { HomeAuthButton } from "@/components/HomeAuthButton";
 import { Logo } from "@/components/Logo";
 import { PublicToolList } from "@/components/PublicToolList";
+import { todayUtc } from "@/lib/format";
 
 // Rendered per request so the list is fresh and the build never needs a live backend.
 export const dynamic = "force-dynamic";
 
+// Server-side calls can use a private address for Convex (for example a Docker network name)
+// while the browser keeps using the public NEXT_PUBLIC_CONVEX_URL.
+const serverConvex = process.env.CONVEX_INTERNAL_URL ? { url: process.env.CONVEX_INTERNAL_URL } : {};
+
 export default async function HomePage() {
   // Server-side render of the public list (name and category only), kept live on the client.
-  const tools = await preloadQuery(api.tools.listPublic, {});
+  const tools = await preloadQuery(api.tools.listPublic, { today: todayUtc() }, serverConvex);
 
   return (
     <div className="mx-auto flex min-h-screen max-w-5xl flex-col px-4 sm:px-6">

@@ -3,12 +3,13 @@
 import { useMutation, useQuery } from "convex/react";
 import Link from "next/link";
 import { api } from "@/convex/_generated/api";
+import { todayUtc } from "@/lib/format";
 import { LoanCard, type LoanView } from "@/components/LoanCard";
 import { Button, EmptyState, ErrorText, LoadingCards, PageHeader } from "@/components/ui";
 import { useSubmit } from "@/lib/useSubmit";
 
 export default function MyRequestsPage() {
-  const loans = useQuery(api.loans.myRequests);
+  const loans = useQuery(api.loans.myRequests, { today: todayUtc() });
 
   return (
     <>

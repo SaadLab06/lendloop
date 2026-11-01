@@ -13,7 +13,19 @@ export function isIsoDate(value: string): boolean {
   return !Number.isNaN(parsed.getTime()) && parsed.toISOString().slice(0, 10) === value;
 }
 
-/** Today's date in UTC. The server is the only clock that counts. */
+/**
+ * Validates a date passed in as a query argument.
+ * Queries take "today" as an argument instead of reading the clock: Convex caches a query's result
+ * until the data it read changes, and the date changing is not a data change.
+ */
+export function assertIsoDate(value: string, field = "Date"): string {
+  if (!isIsoDate(value)) {
+    throw new ConvexError(`${field} must be a valid day in the format YYYY-MM-DD.`);
+  }
+  return value;
+}
+
+/** Today's date in UTC. Mutations use it for every rule; queries receive it as an argument. */
 export function todayIso(now: number = Date.now()): string {
   return new Date(now).toISOString().slice(0, 10);
 }

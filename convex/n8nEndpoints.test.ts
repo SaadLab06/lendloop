@@ -112,6 +112,12 @@ describe("request notification", () => {
     expect(status).toBe(404);
   });
 
+  test("ids that are not Convex ids are a 400, caught by the argument validators", async () => {
+    const { t, eventId } = await pendingRequest();
+    const { status } = await call(t, "GET", "/n8n/loan-context", { scope: "loan-context", loanId: "not-a-loan", eventId });
+    expect(status).toBe(400);
+  });
+
   test("the activity write-back is idempotent on the event id", async () => {
     const { t, borrower, loanId, eventId } = await pendingRequest();
     const claims = { scope: "notification", loanId, eventId };
@@ -125,7 +131,7 @@ describe("request notification", () => {
     expect(context.body.alreadyNotified).toBe(true);
 
     // The bonus feature: the borrower sees the automation activity on the loan.
-    const [loan] = await borrower.as.query(api.loans.myRequests, {});
+    const [loan] = await borrower.as.query(api.loans.myRequests, { today: days(0) });
     expect(loan.activity[0].summary).toBe("Lender notified of the new request");
   });
 });

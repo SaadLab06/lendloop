@@ -9,12 +9,14 @@
  */
 
 import type * as admin from "../admin.js";
+import type * as crons from "../crons.js";
 import type * as http from "../http.js";
 import type * as lib_auth from "../lib/auth.js";
 import type * as lib_constants from "../lib/constants.js";
 import type * as lib_dates from "../lib/dates.js";
 import type * as lib_jws from "../lib/jws.js";
 import type * as lib_loans from "../lib/loans.js";
+import type * as lib_outbox from "../lib/outbox.js";
 import type * as lib_validation from "../lib/validation.js";
 import type * as loans from "../loans.js";
 import type * as n8n from "../n8n.js";
@@ -31,12 +33,14 @@ import type {
 
 declare const fullApi: ApiFromModules<{
   admin: typeof admin;
+  crons: typeof crons;
   http: typeof http;
   "lib/auth": typeof lib_auth;
   "lib/constants": typeof lib_constants;
   "lib/dates": typeof lib_dates;
   "lib/jws": typeof lib_jws;
   "lib/loans": typeof lib_loans;
+  "lib/outbox": typeof lib_outbox;
   "lib/validation": typeof lib_validation;
   loans: typeof loans;
   n8n: typeof n8n;

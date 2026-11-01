@@ -1,8 +1,8 @@
 // The transactional outbox: signed delivery to n8n, retries with backoff, and failures an admin can see.
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
-import { api } from "./_generated/api";
+import { api, internal } from "./_generated/api";
 import { verifyJws } from "./lib/jws";
-import { BASE_RETRY_DELAY_MS, MAX_ATTEMPTS } from "./outbox";
+import { BASE_RETRY_DELAY_MS, MAX_ATTEMPTS, STUCK_AFTER_MS } from "./outbox";
 import { days, listTool, makeAdmin, setupTest, signIn, TEST_SECRETS } from "./test.setup";
 
 beforeEach(() => vi.useFakeTimers());
@@ -87,6 +87,27 @@ test("an admin can retry a failed event once n8n is back", async () => {
   await t.finishAllScheduledFunctions(vi.runAllTimers);
 
   expect((await t.run((ctx) => ctx.db.get("outbox", failed._id)))?.state).toBe("delivered");
+});
+
+test("the cron re-queues an event whose delivery action died without recording anything", async () => {
+  const fetchMock = vi.fn<typeof fetch>(async () => new Response("ok", { status: 200 }));
+  vi.stubGlobal("fetch", fetchMock);
+  const { t, loanId } = await requestALoan();
+  // Simulate a crashed action: drop the scheduled delivery, leaving the row pending.
+  await t.run(async (ctx) => {
+    for (const job of await ctx.db.system.query("_scheduled_functions").collect()) {
+      await ctx.scheduler.cancel(job._id);
+    }
+  });
+
+  expect(await t.mutation(internal.outbox.requeueStuck, {})).toBe(0); // not stuck yet
+  vi.advanceTimersByTime(STUCK_AFTER_MS + 1000);
+  expect(await t.mutation(internal.outbox.requeueStuck, {})).toBe(1);
+  await t.finishAllScheduledFunctions(vi.runAllTimers);
+
+  expect(fetchMock).toHaveBeenCalledTimes(1);
+  const [event] = await t.run((ctx) => ctx.db.query("outbox").collect());
+  expect(event).toMatchObject({ loanId, state: "delivered" });
 });
 
 test("a missing webhook URL counts as a failure instead of passing silently", async () => {

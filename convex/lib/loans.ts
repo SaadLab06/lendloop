@@ -1,9 +1,9 @@
 import { ConvexError } from "convex/values";
 import type { Doc, Id } from "../_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "../_generated/server";
-import { enqueueLoanEvent } from "../outbox";
 import type { LoanStatus } from "./constants";
-import { rangesOverlap, todayIso } from "./dates";
+import { rangesOverlap } from "./dates";
+import { enqueueLoanEvent } from "./outbox";
 
 export async function approvedLoans(ctx: QueryCtx, toolId: Id<"tools">) {
   return await ctx.db
@@ -18,14 +18,23 @@ export async function isOnLoan(ctx: QueryCtx, toolId: Id<"tools">, today: string
   return loans.some((loan) => loan.startDate <= today);
 }
 
+/**
+ * Rejects a date range that clashes with an approved loan. An overdue loan (end date passed,
+ * not returned) still holds the tool, so it blocks every new range until the lender marks it returned.
+ */
 export async function assertNoApprovedOverlap(
   ctx: QueryCtx,
   toolId: Id<"tools">,
   range: { startDate: string; endDate: string },
+  today: string,
 ): Promise<void> {
-  const loans = await approvedLoans(ctx, toolId);
-  if (loans.some((loan) => rangesOverlap(loan, range))) {
-    throw new ConvexError("Those dates overlap an approved loan for this tool.");
+  for (const loan of await approvedLoans(ctx, toolId)) {
+    if (loan.endDate < today) {
+      throw new ConvexError("This tool has not come back from its last loan yet.");
+    }
+    if (rangesOverlap(loan, range)) {
+      throw new ConvexError("Those dates overlap an approved loan for this tool.");
+    }
   }
 }
 
@@ -48,7 +57,7 @@ export function firstName(user: Doc<"users"> | null): string {
 }
 
 /** The shape every loan list in the UI uses. People appear by first name only. */
-export async function describeLoan(ctx: QueryCtx, loan: Doc<"loans">) {
+export async function describeLoan(ctx: QueryCtx, loan: Doc<"loans">, today: string) {
   const [tool, lender, borrower, activity] = await Promise.all([
     ctx.db.get("tools", loan.toolId),
     ctx.db.get("users", loan.lenderId),
@@ -66,7 +75,7 @@ export async function describeLoan(ctx: QueryCtx, loan: Doc<"loans">) {
     endDate: loan.endDate,
     message: loan.message,
     status: loan.status,
-    overdue: loan.status === "approved" && loan.endDate < todayIso(),
+    overdue: loan.status === "approved" && loan.endDate < today,
     lenderName: firstName(lender),
     borrowerName: firstName(borrower),
     requestedAt: loan._creationTime,

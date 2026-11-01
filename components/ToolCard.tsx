@@ -14,10 +14,12 @@ export type ToolView = FunctionReturnType<typeof api.tools.list>[number];
 export function ToolCard({ tool, action }: { tool: ToolView; action?: ReactNode }) {
   const [requesting, setRequesting] = useState(false);
   const [sent, setSent] = useState(false);
+  // An overdue loan blocks new requests until the lender marks the tool returned.
+  const overdue = tool.bookings.some((booking) => booking.overdue);
 
   // Pages can pass their own action (the admin view passes "Remove"). Otherwise others' tools get a request button.
   let footerAction = action;
-  if (footerAction === undefined && !tool.isMine) {
+  if (footerAction === undefined && !tool.isMine && !overdue) {
     if (sent) {
       footerAction = <span className="text-brand">Request sent. Track it under My requests.</span>;
     } else if (!requesting) {
@@ -38,13 +40,20 @@ export function ToolCard({ tool, action }: { tool: ToolView; action?: ReactNode 
             {categoryLabel(tool.category)} · {conditionLabel(tool.condition)}
           </p>
         </div>
-        {tool.available ? <Badge tone="green">Available</Badge> : <Badge tone="amber">On loan</Badge>}
+        {tool.available ? (
+          <Badge tone="green">Available</Badge>
+        ) : overdue ? (
+          <Badge tone="red">Overdue</Badge>
+        ) : (
+          <Badge tone="amber">On loan</Badge>
+        )}
       </div>
 
       <p className="text-sm">{tool.description}</p>
 
       {tool.bookings.length > 0 && (
         <p className="text-xs text-muted">
+          {overdue ? "Not returned yet. " : ""}
           Booked: {tool.bookings.map((b) => formatRange(b.startDate, b.endDate)).join(", ")}
         </p>
       )}

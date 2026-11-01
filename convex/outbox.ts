@@ -1,34 +1,22 @@
-// Transactional outbox for Convex -> n8n events.
+// Delivery side of the transactional outbox (Convex -> n8n).
 //
-// A mutation that changes a loan calls enqueueLoanEvent in the same transaction, so the loan change
-// and the event either both commit or both roll back. deliver() then POSTs a signed event to the
-// n8n webhook. Failed attempts are retried with exponential backoff, and after MAX_ATTEMPTS the row
-// is marked "failed" so it shows up in the admin view instead of disappearing.
+// Mutations queue events with enqueueLoanEvent (lib/outbox.ts) in the same transaction as the
+// loan change. deliver() then POSTs a signed event to the n8n webhook. Failed attempts are
+// retried with exponential backoff; after MAX_ATTEMPTS the row is marked "failed" and shows up
+// in the admin view. A cron re-queues rows whose delivery action died without recording anything.
 import { v } from "convex/values";
 import { internal } from "./_generated/api";
-import type { Id } from "./_generated/dataModel";
-import { internalAction, internalMutation, internalQuery, type MutationCtx } from "./_generated/server";
-import type { EventType, LoanStatus } from "./lib/constants";
+import { internalAction, internalMutation, internalQuery } from "./_generated/server";
 import { signJws } from "./lib/jws";
 
 export const MAX_ATTEMPTS = 5;
 export const BASE_RETRY_DELAY_MS = 10_000; // 10s, 20s, 40s, 80s between the five attempts
+export const STUCK_AFTER_MS = 5 * 60_000; // longer than any retry delay
 const REQUEST_TIMEOUT_MS = 10_000;
 const TOKEN_LIFETIME_SECONDS = 300;
 
 export function retryDelayMs(attempts: number): number {
   return BASE_RETRY_DELAY_MS * 2 ** (attempts - 1);
-}
-
-export async function enqueueLoanEvent(
-  ctx: MutationCtx,
-  loanId: Id<"loans">,
-  type: EventType,
-  status: LoanStatus,
-): Promise<Id<"outbox">> {
-  const outboxId = await ctx.db.insert("outbox", { loanId, type, status, state: "pending", attempts: 0 });
-  await ctx.scheduler.runAfter(0, internal.outbox.deliver, { outboxId });
-  return outboxId;
 }
 
 export const get = internalQuery({
@@ -91,7 +79,7 @@ export const markDelivered = internalMutation({
   args: { outboxId: v.id("outbox") },
   handler: async (ctx, { outboxId }) => {
     const event = await ctx.db.get("outbox", outboxId);
-    if (event === null) return;
+    if (event === null || event.state === "delivered") return;
     await ctx.db.patch("outbox", outboxId, {
       state: "delivered",
       attempts: event.attempts + 1,
@@ -113,7 +101,29 @@ export const recordFailedAttempt = internalMutation({
       await ctx.db.patch("outbox", outboxId, { state: "failed", attempts, lastError });
       return;
     }
-    await ctx.db.patch("outbox", outboxId, { attempts, lastError });
-    await ctx.scheduler.runAfter(retryDelayMs(attempts), internal.outbox.deliver, { outboxId });
+    const delay = retryDelayMs(attempts);
+    await ctx.db.patch("outbox", outboxId, { attempts, lastError, nextAttemptAt: Date.now() + delay });
+    await ctx.scheduler.runAfter(delay, internal.outbox.deliver, { outboxId });
+  },
+});
+
+/**
+ * Safety net, run by a cron (crons.ts). If a delivery action crashed or timed out before it could
+ * record success or failure, its row would stay "pending" with nothing scheduled. Re-queue those.
+ * A duplicate delivery is harmless: n8n dedupes on the event id.
+ */
+export const requeueStuck = internalMutation({
+  args: {},
+  handler: async (ctx) => {
+    const now = Date.now();
+    const stuck = await ctx.db
+      .query("outbox")
+      .withIndex("by_state_next_attempt", (q) => q.eq("state", "pending").lt("nextAttemptAt", now - STUCK_AFTER_MS))
+      .take(50);
+    for (const event of stuck) {
+      await ctx.db.patch("outbox", event._id, { nextAttemptAt: now });
+      await ctx.scheduler.runAfter(0, internal.outbox.deliver, { outboxId: event._id });
+    }
+    return stuck.length;
   },
 });

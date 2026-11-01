@@ -7,7 +7,7 @@ import { api } from "@/convex/_generated/api";
 import { LoanCard } from "@/components/LoanCard";
 import { ToolCard } from "@/components/ToolCard";
 import { Badge, Button, Card, EmptyState, ErrorText, LoadingCards, PageHeader } from "@/components/ui";
-import { timeAgo } from "@/lib/format";
+import { timeAgo, todayUtc } from "@/lib/format";
 import { useSubmit } from "@/lib/useSubmit";
 
 export default function AdminPage() {
@@ -143,7 +143,7 @@ function MemberRow({ user, isMe }: { user: Member; isMe: boolean }) {
 }
 
 function AllLoans() {
-  const loans = useQuery(api.admin.listLoans);
+  const loans = useQuery(api.admin.listLoans, { today: todayUtc() });
   const markReturned = useSubmit(useMutation(api.loans.markReturned));
   return (
     <Section title="All loans">
@@ -175,7 +175,7 @@ function AllLoans() {
 }
 
 function AllListings() {
-  const tools = useQuery(api.tools.list, {});
+  const tools = useQuery(api.tools.list, { today: todayUtc() });
   const remove = useSubmit(useMutation(api.tools.remove));
   return (
     <Section title="All listings">

@@ -104,11 +104,11 @@ describe("requests and loans", () => {
 
   test("each user sees only their own requests and incoming requests", async () => {
     const { lender, borrower, stranger } = await scenario();
-    expect(await borrower.as.query(api.loans.myRequests, {})).toHaveLength(1);
-    expect(await borrower.as.query(api.loans.incoming, {})).toHaveLength(0);
-    expect(await lender.as.query(api.loans.incoming, {})).toHaveLength(1);
-    expect(await stranger.as.query(api.loans.myRequests, {})).toHaveLength(0);
-    expect(await stranger.as.query(api.loans.incoming, {})).toHaveLength(0);
+    expect(await borrower.as.query(api.loans.myRequests, { today: days(0) })).toHaveLength(1);
+    expect(await borrower.as.query(api.loans.incoming, { today: days(0) })).toHaveLength(0);
+    expect(await lender.as.query(api.loans.incoming, { today: days(0) })).toHaveLength(1);
+    expect(await stranger.as.query(api.loans.myRequests, { today: days(0) })).toHaveLength(0);
+    expect(await stranger.as.query(api.loans.incoming, { today: days(0) })).toHaveLength(0);
   });
 });
 
@@ -116,7 +116,7 @@ describe("admin powers", () => {
   test("admin queries reject regular users", async () => {
     const t = setupTest();
     const bob = await signIn(t, "Bob");
-    await expect(bob.as.query(api.admin.listLoans, {})).rejects.toThrow(/Only admins/);
+    await expect(bob.as.query(api.admin.listLoans, { today: days(0) })).rejects.toThrow(/Only admins/);
     await expect(bob.as.query(api.admin.listUsers, {})).rejects.toThrow(/Only admins/);
     await expect(bob.as.query(api.admin.automationHealth, {})).rejects.toThrow(/Only admins/);
   });
@@ -130,13 +130,13 @@ describe("admin powers", () => {
     const toolId = await listTool(alice.as);
     await bob.as.mutation(api.loans.request, { toolId, startDate: days(1), endDate: days(2) });
 
-    expect(await admin.as.query(api.admin.listLoans, {})).toHaveLength(1);
+    expect(await admin.as.query(api.admin.listLoans, { today: days(0) })).toHaveLength(1);
 
     await expect(bob.as.mutation(api.admin.setTrustedLender, { userId: alice.id, trusted: true })).rejects.toThrow(
       /Only admins/,
     );
     await admin.as.mutation(api.admin.setTrustedLender, { userId: alice.id, trusted: true });
-    const tools = await bob.as.query(api.tools.list, {});
+    const tools = await bob.as.query(api.tools.list, { today: days(0) });
     expect(tools[0].ownerTrusted).toBe(true);
   });
 

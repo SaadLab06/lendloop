@@ -47,14 +47,54 @@ test("rejects a request whose dates overlap an approved loan", async () => {
   await carol.as.mutation(api.loans.request, { toolId, startDate: days(6), endDate: days(7) });
 });
 
-test("approving re-checks overlaps, so only one of two overlapping requests can win", async () => {
+test("approving re-checks overlaps against approved loans", async () => {
   const { t, lender, borrower, toolId } = await setup();
   const carol = await signIn(t, "Carol");
-  const first = await borrower.as.mutation(api.loans.request, { toolId, startDate: days(1), endDate: days(4) });
-  const second = await carol.as.mutation(api.loans.request, { toolId, startDate: days(3), endDate: days(6) });
+  const pending = await borrower.as.mutation(api.loans.request, { toolId, startDate: days(3), endDate: days(6) });
+  // An approved loan for the same days appears after the request was made.
+  await t.run((ctx) =>
+    ctx.db.insert("loans", { toolId, lenderId: lender.id, borrowerId: carol.id, startDate: days(1), endDate: days(4), status: "approved" }),
+  );
 
-  await lender.as.mutation(api.loans.approve, { loanId: first });
-  await expect(lender.as.mutation(api.loans.approve, { loanId: second })).rejects.toThrow(/overlap/);
+  await expect(lender.as.mutation(api.loans.approve, { loanId: pending })).rejects.toThrow(/overlap/);
+});
+
+test("approving a request declines the other pending requests for the same days", async () => {
+  const { t, lender, borrower, toolId } = await setup();
+  const carol = await signIn(t, "Carol");
+  const dave = await signIn(t, "Dave");
+  const winner = await borrower.as.mutation(api.loans.request, { toolId, startDate: days(1), endDate: days(4) });
+  const clash = await carol.as.mutation(api.loans.request, { toolId, startDate: days(3), endDate: days(6) });
+  const later = await dave.as.mutation(api.loans.request, { toolId, startDate: days(10), endDate: days(11) });
+
+  await lender.as.mutation(api.loans.approve, { loanId: winner });
+
+  const status = async (id: typeof winner) => (await t.run((ctx) => ctx.db.get("loans", id)))?.status;
+  expect(await status(clash)).toBe("declined");
+  expect(await status(later)).toBe("pending"); // different days, still up to the lender
+});
+
+test("an overdue loan that was never returned blocks new requests for the tool", async () => {
+  const { t, lender, borrower, toolId } = await setup();
+  const carol = await signIn(t, "Carol");
+  // Bob's loan ended two days ago and Alice has not marked it returned.
+  const overdue = await t.run((ctx) =>
+    ctx.db.insert("loans", {
+      toolId,
+      lenderId: lender.id,
+      borrowerId: borrower.id,
+      startDate: days(-5),
+      endDate: days(-2),
+      status: "approved",
+    }),
+  );
+
+  await expect(
+    carol.as.mutation(api.loans.request, { toolId, startDate: days(1), endDate: days(2) }),
+  ).rejects.toThrow(/not come back/);
+
+  await lender.as.mutation(api.loans.markReturned, { loanId: overdue });
+  await carol.as.mutation(api.loans.request, { toolId, startDate: days(1), endDate: days(2) });
 });
 
 test("a borrower cannot stack pending requests for the same tool", async () => {
