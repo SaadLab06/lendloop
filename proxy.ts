@@ -1,14 +1,8 @@
-import { clerkMiddleware, createRouteMatcher } from "@clerk/nextjs/server";
+import { clerkMiddleware } from "@clerk/nextjs/server";
 
-// Signed-out visitors who open an app page are sent to sign in.
-// This is a convenience only: every Convex function checks access itself.
-const isAppRoute = createRouteMatcher(["/tools(.*)", "/listings(.*)", "/requests(.*)", "/incoming(.*)", "/admin(.*)"]);
-
-export default clerkMiddleware(async (auth, request) => {
-  if (isAppRoute(request)) {
-    await auth.protect();
-  }
-});
+// Makes the Clerk session available to server components (auth() in app/(app)/layout.tsx).
+// Access is checked where the data is: the (app) layout for pages, each Convex function for data.
+export default clerkMiddleware();
 
 export const config = {
   matcher: [
