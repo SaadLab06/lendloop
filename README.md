@@ -153,14 +153,21 @@ publishable and secret keys in `.env.local`. Then give Convex a token it accepts
 `ConvexProviderWithClerk` uses the session token when its audience is `convex` and the `convex`
 template otherwise.
 
-**3. Convex.**
+**3. Secrets and Convex.** Generate the two integration secrets once, into `n8n/.env`, so Convex
+and n8n get the same values:
 
 ```bash
-npx convex dev            # pick a cloud dev deployment or a local one; keep it running
+cp n8n/.env.example n8n/.env
+for key in N8N_ENCRYPTION_KEY N8N_WEBHOOK_SECRET N8N_API_SECRET; do
+  sed -i "s|^$key=.*|$key=$(openssl rand -hex 32)|" n8n/.env
+done
+set -a; . n8n/.env; set +a
+
+npx convex dev            # pick a cloud dev deployment or a local one; keep it running in its own terminal
 npx convex env set CLERK_JWT_ISSUER_DOMAIN https://<your-app>.clerk.accounts.dev
 npx convex env set N8N_WEBHOOK_URL http://localhost:5678/webhook/lendloop-loan-event
-npx convex env set N8N_WEBHOOK_SECRET "$(openssl rand -hex 32)"
-npx convex env set N8N_API_SECRET "$(openssl rand -hex 32)"
+npx convex env set N8N_WEBHOOK_SECRET "$N8N_WEBHOOK_SECRET"
+npx convex env set N8N_API_SECRET "$N8N_API_SECRET"
 npx convex run seed:demo  # optional: three demo neighbors, six tools, one overdue loan
 ```
 
@@ -170,7 +177,6 @@ Without a Convex account, `CONVEX_AGENT_MODE=anonymous npx convex dev` runs a lo
 **4. n8n.**
 
 ```bash
-cp n8n/.env.example n8n/.env           # set N8N_ENCRYPTION_KEY, and the two secrets from step 3
 docker compose --env-file n8n/.env up -d   # n8n on http://localhost:5678, create the owner account
 set -a; . n8n/.env; set +a
 N8N_CONTAINER=lendloop-n8n-1 CONVEX_SITE_URL=http://host.docker.internal:3211 bash n8n/import.sh
@@ -261,7 +267,9 @@ The 60 tests use `convex-test` and `t.withIdentity(...)` instead of real logins:
 **Access control lives in Convex.** The UI hides what you cannot do, and the `(app)` layout sends
 signed-out visitors to sign in, but neither is the control. Every public query and mutation starts with
 `requireUser` or `requireAdmin` and then checks ownership against the loaded document, so a user who
-calls the Convex API directly gets the same answer as the UI. The role is stored in Convex, defaults to
+calls the Convex API directly gets the same answer as the UI. The three exceptions are
+`tools.listPublic` (public by design, two fields), `users.store` (creates the caller's own row from
+their verified token) and `users.me` (returns the caller's own profile, or null). The role is stored in Convex, defaults to
 `user`, and is never read from the Clerk token, so editing Clerk metadata cannot grant admin. The first
 admin is created from the CLI with an internal mutation, which the browser cannot call. Admins cannot
 change their own role, which avoids locking everyone out.
@@ -314,9 +322,11 @@ credentials, and in the server's `chmod 600` `.env`. `n8n/import.sh` writes the 
 with `umask 077` and deletes every copy when it exits, even on failure. The repo has `.env.example`
 files only, and Clerk's keyless `.clerk/` folder is ignored.
 
-**Less personal data in n8n.** Successful notification and reminder runs are not saved in n8n
-(`saveDataSuccessExecution: none`); the Convex activity row is the success record. Failed runs are kept
-for debugging. Log lines from the mock senders mask the address (`a***@example.com`).
+**Less personal data in n8n.** Successful and manual notification and reminder runs are not saved in
+n8n (`saveDataSuccessExecution: none`, `saveManualExecutions: false`); the Convex activity row is the
+success record. Failed runs are kept for debugging. Log lines from the mock senders mask the address
+(`a***@example.com`), and a recipient with no email on file is written back as a failed notification or
+reminder rather than a sent one.
 
 **Smaller things.** Security headers (`nosniff`, `DENY` framing, strict referrer, permissions policy)
 in `next.config.ts`; `X-Powered-By` off; published ports bound to the LAN address on the server

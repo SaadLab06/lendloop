@@ -83,6 +83,7 @@ http.route({
     ctx.runMutation(internal.n8n.recordNotification, {
       eventId: claims.eventId as Id<"outbox">,
       loanId: claims.loanId as Id<"loans">,
+      status: claims.status as "sent" | "failed",
     }),
   ),
 });

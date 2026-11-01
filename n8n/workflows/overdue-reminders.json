@@ -286,7 +286,7 @@
     "errorWorkflow": "lendLoopErrors01",
     "saveDataErrorExecution": "all",
     "saveDataSuccessExecution": "none",
-    "saveManualExecutions": true,
+    "saveManualExecutions": false,
     "callerPolicy": "workflowsFromSameOwner"
   },
   "pinData": {},

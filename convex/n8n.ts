@@ -69,8 +69,12 @@ export const loanContext = internalQuery({
 
 /** Idempotent on the event id: n8n retries and duplicate webhook deliveries create one record. */
 export const recordNotification = internalMutation({
-  args: { eventId: v.id("outbox"), loanId: v.id("loans") },
-  handler: async (ctx, { eventId, loanId }) => {
+  args: {
+    eventId: v.id("outbox"),
+    loanId: v.id("loans"),
+    status: v.union(v.literal("sent"), v.literal("failed")),
+  },
+  handler: async (ctx, { eventId, loanId, status }) => {
     const event = await getEventForLoan(ctx, eventId, loanId);
     if (event === null) return null;
     if ((await findActivity(ctx, eventId)) !== null) return { created: false };
@@ -78,8 +82,8 @@ export const recordNotification = internalMutation({
       loanId,
       kind: "notification",
       idempotencyKey: eventId,
-      status: "sent",
-      summary: NOTIFICATION_SUMMARY[event.status],
+      status,
+      summary: status === "sent" ? NOTIFICATION_SUMMARY[event.status] : "Notification could not be sent (no email on file)",
     });
     return { created: true };
   },

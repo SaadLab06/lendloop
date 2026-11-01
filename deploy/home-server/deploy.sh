@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Deploys LendLoop to a Docker host that already runs the stack in compose.yml.
-# Run from anywhere; it works on the committed code (git archive HEAD), never on local changes.
+# It refuses to run with uncommitted changes, so the Convex functions and the app image
+# always come from the same commit.
 #
 #   SSH_HOST=myserver bash deploy/home-server/deploy.sh
 #
@@ -9,6 +10,10 @@
 set -euo pipefail
 cd "$(dirname "$0")/../.."
 : "${SSH_HOST:?set SSH_HOST}"
+if [ -n "$(git status --porcelain)" ]; then
+  echo "Commit or stash your changes first: convex deploy pushes the working tree, the app uses HEAD."
+  exit 1
+fi
 STACK_DIR=${STACK_DIR:-stacks/lendloop} # relative to the remote home directory
 
 echo "1/3 Pushing Convex functions, schema and indexes to the self-hosted backend"

@@ -76,7 +76,7 @@ describe("signature checks", () => {
     expect(expired.status).toBe(401);
 
     expect((await call(t, "GET", "/n8n/loan-context", claims, { lifetime: 3600 })).status).toBe(401);
-    expect((await call(t, "POST", "/n8n/notifications", claims)).status).toBe(403);
+    expect((await call(t, "POST", "/n8n/notifications", { ...claims, status: "sent" })).status).toBe(403);
   });
 });
 
@@ -120,7 +120,7 @@ describe("request notification", () => {
 
   test("the activity write-back is idempotent on the event id", async () => {
     const { t, borrower, loanId, eventId } = await pendingRequest();
-    const claims = { scope: "notification", loanId, eventId };
+    const claims = { scope: "notification", loanId, eventId, status: "sent" };
 
     expect((await call(t, "POST", "/n8n/notifications", claims)).body).toEqual({ created: true });
     expect((await call(t, "POST", "/n8n/notifications", claims)).body).toEqual({ created: false });

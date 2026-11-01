@@ -24,3 +24,6 @@ clerk.lock
 .DS_Store
 *.pem
 npm-debug.log*
+
+# local test report folder some wrappers create
+/.vitest/

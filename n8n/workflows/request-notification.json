@@ -239,7 +239,7 @@
         40
       ],
       "parameters": {
-        "jsCode": "// Mock notification: builds the message an Email or Slack node would send and logs it.\n// Swap this node for a real channel; the fields it needs are already here.\nconst context = $input.first().json;\nconst tool = context.toolName;\nconst subjects = {\n  pending: `New request to borrow your ${tool}`,\n  approved: `Your request for the ${tool} was approved`,\n  declined: `Your request for the ${tool} was declined`,\n  cancelled: `A request for your ${tool} was cancelled`,\n  returned: `Loan closed: the ${tool} is back with its owner`,\n};\nconst subject = subjects[context.status] ?? `Update on the ${tool}`;\nconst message = {\n  channel: 'mock-email',\n  to: context.recipient.email ?? '(no email on file)',\n  subject,\n  text: `Hi ${context.recipient.firstName}. ${subject} (${context.startDate} to ${context.endDate}). Open LendLoop for details.`,\n};\n// The log line masks the address, so logs never hold a full email.\nconst masked = String(message.to).replace(/^(.).*(@.*)$/, '$1***$2');\nconsole.log('[LendLoop mock notification]', JSON.stringify({ ...message, to: masked }));\nreturn [{ json: message }];"
+        "jsCode": "// Mock notification: builds the message an Email or Slack node would send and logs it.\n// Swap this node for a real channel; the fields it needs are already here.\nconst context = $input.first().json;\nconst tool = context.toolName;\nconst subjects = {\n  pending: `New request to borrow your ${tool}`,\n  approved: `Your request for the ${tool} was approved`,\n  declined: `Your request for the ${tool} was declined`,\n  cancelled: `A request for your ${tool} was cancelled`,\n  returned: `Loan closed: the ${tool} is back with its owner`,\n};\nconst subject = subjects[context.status] ?? `Update on the ${tool}`;\nconst message = {\n  channel: 'mock-email',\n  to: context.recipient.email ?? '(no email on file)',\n  subject,\n  text: `Hi ${context.recipient.firstName}. ${subject} (${context.startDate} to ${context.endDate}). Open LendLoop for details.`,\n};\n// The log line masks the address, so logs never hold a full email.\nconst masked = String(message.to).replace(/^(.).*(@.*)$/, '$1***$2');\nconsole.log('[LendLoop mock notification]', JSON.stringify({ ...message, to: masked }));\n// No address means nothing can be sent: record that as failed instead of pretending.\nreturn [{ json: { ...message, status: context.recipient.email ? 'sent' : 'failed' } }];"
       }
     },
     {
@@ -254,7 +254,7 @@
       "parameters": {
         "operation": "sign",
         "useJson": true,
-        "claimsJson": "={\n  \"iss\": \"lendloop-n8n\",\n  \"aud\": \"lendloop-convex\",\n  \"scope\": \"notification\",\n  \"jti\": \"{{ $execution.id }}-notification\",\n  \"exp\": {{ Math.floor(Date.now() / 1000) + 300 }},\n  \"eventId\": \"{{ $('Event').item.json.eventId }}\",\n  \"loanId\": \"{{ $('Event').item.json.loanId }}\"\n}",
+        "claimsJson": "={\n  \"iss\": \"lendloop-n8n\",\n  \"aud\": \"lendloop-convex\",\n  \"scope\": \"notification\",\n  \"jti\": \"{{ $execution.id }}-notification\",\n  \"exp\": {{ Math.floor(Date.now() / 1000) + 300 }},\n  \"eventId\": \"{{ $('Event').item.json.eventId }}\",\n  \"loanId\": \"{{ $('Event').item.json.loanId }}\",\n  \"status\": \"{{ $json.status }}\"\n}",
         "options": {}
       },
       "credentials": {
@@ -403,7 +403,7 @@
     "errorWorkflow": "lendLoopErrors01",
     "saveDataErrorExecution": "all",
     "saveDataSuccessExecution": "none",
-    "saveManualExecutions": true,
+    "saveManualExecutions": false,
     "callerPolicy": "workflowsFromSameOwner"
   },
   "pinData": {},
