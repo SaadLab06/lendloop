@@ -1,4 +1,4 @@
-# Local n8n for LendLoop development. Start it with: docker compose up -d
+# Local n8n for LendLoop development. Start it with: docker compose --env-file n8n/.env up -d
 # Then import the workflows with n8n/import.sh (see README, "Local setup").
 services:
   n8n:
@@ -10,7 +10,7 @@ services:
       - GENERIC_TIMEZONE=UTC
       - TZ=UTC
       # Encrypts the credentials stored in n8n. Keep it stable, or n8n cannot read them after a restart.
-      - N8N_ENCRYPTION_KEY=${N8N_ENCRYPTION_KEY:?Set N8N_ENCRYPTION_KEY in .env}
+      - N8N_ENCRYPTION_KEY=${N8N_ENCRYPTION_KEY:?Set N8N_ENCRYPTION_KEY in n8n/.env}
       - N8N_HOST=localhost
       - WEBHOOK_URL=http://localhost:5678/
       - N8N_SECURE_COOKIE=false # plain http on localhost
