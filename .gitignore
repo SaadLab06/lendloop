@@ -1,0 +1,26 @@
+# dependencies
+/node_modules
+
+# testing
+/coverage
+
+# next.js
+/.next/
+/out/
+/build
+next-env.d.ts
+*.tsbuildinfo
+
+# env files: only the examples are committed
+.env*
+!.env.example
+!*.env.example
+
+# Clerk keyless mode writes a temporary secret key here
+/.clerk/
+clerk.lock
+
+# misc
+.DS_Store
+*.pem
+npm-debug.log*
