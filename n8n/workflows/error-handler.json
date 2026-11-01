@@ -1,0 +1,97 @@
+{
+  "id": "lendLoopErrors01",
+  "name": "LendLoop: error handler",
+  "active": false,
+  "nodes": [
+    {
+      "id": "866ee67a-b4a4-40bc-85b7-758adc342b5b",
+      "name": "Error Trigger",
+      "type": "n8n-nodes-base.errorTrigger",
+      "typeVersion": 1,
+      "position": [0, 0],
+      "parameters": {},
+      "notes": "Runs when a workflow that names this one as its error workflow fails (after its own retries)."
+    },
+    {
+      "id": "f2d1a7c4-3b8e-4e55-9a61-0c7d2e9b4a18",
+      "name": "Config",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [220, 0],
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "7a9e3c51-2d4f-4b86-8e1a-5c3f9d0b7e62",
+              "name": "convexSiteUrl",
+              "value": "http://host.docker.internal:3211",
+              "type": "string"
+            }
+          ]
+        },
+        "includeOtherFields": true,
+        "options": {}
+      },
+      "notes": "convexSiteUrl is the Convex HTTP actions URL (not a secret). n8n/import.sh sets it per environment."
+    },
+    {
+      "id": "9c4b2e7d-6a1f-4d38-b5e0-3f8a1c6d2b97",
+      "name": "Sign failure report",
+      "type": "n8n-nodes-base.jwt",
+      "typeVersion": 1,
+      "position": [440, 0],
+      "parameters": {
+        "operation": "sign",
+        "useJson": true,
+        "claimsJson": "={\n  \"iss\": \"lendloop-n8n\",\n  \"aud\": \"lendloop-convex\",\n  \"scope\": \"automation-failure\",\n  \"jti\": \"{{ $execution.id }}-failure\",\n  \"exp\": {{ Math.floor(Date.now() / 1000) + 300 }},\n  \"executionId\": {{ JSON.stringify(String($json.execution?.id ?? 'trigger-' + $execution.id)) }},\n  \"workflow\": {{ JSON.stringify($json.workflow?.name ?? 'Unknown workflow') }},\n  \"node\": {{ JSON.stringify($json.execution?.lastNodeExecuted ?? $json.trigger?.error?.node?.name ?? 'Trigger') }},\n  \"message\": {{ JSON.stringify(String($json.execution?.error?.message ?? $json.trigger?.error?.message ?? 'Unknown error').slice(0, 500)) }}\n}",
+        "options": {}
+      },
+      "credentials": {
+        "jwtAuth": "LendLoop: n8n to Convex"
+      }
+    },
+    {
+      "id": "2e6f8a3b-9d1c-4c47-a0b5-7e2d4f9c1a36",
+      "name": "Report failure to Convex",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [660, 0],
+      "retryOnFail": true,
+      "maxTries": 5,
+      "waitBetweenTries": 5000,
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $('Config').item.json.convexSiteUrl }}/n8n/automation-failures",
+        "sendHeaders": true,
+        "specifyHeaders": "keypair",
+        "headerParameters": {
+          "parameters": [{ "name": "Authorization", "value": "=Bearer {{ $json.token }}" }]
+        },
+        "options": { "timeout": 10000 }
+      },
+      "notes": "Shows the failure in the LendLoop admin view. If Convex itself is down, this run fails too and stays visible in the n8n executions list."
+    }
+  ],
+  "connections": {
+    "Error Trigger": {
+      "main": [[{ "node": "Config", "type": "main", "index": 0 }]]
+    },
+    "Config": {
+      "main": [[{ "node": "Sign failure report", "type": "main", "index": 0 }]]
+    },
+    "Sign failure report": {
+      "main": [[{ "node": "Report failure to Convex", "type": "main", "index": 0 }]]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "UTC",
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all",
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner"
+  },
+  "pinData": {},
+  "meta": { "templateCredsSetupCompleted": true },
+  "tags": []
+}

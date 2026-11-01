@@ -1,0 +1,185 @@
+{
+  "id": "lendLoopRemind01",
+  "name": "LendLoop: overdue reminders",
+  "active": false,
+  "nodes": [
+    {
+      "id": "c98b5f5e-fd6f-4feb-bca1-b9963a983656",
+      "name": "Every day at 08:00 UTC",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [0, 0],
+      "parameters": {
+        "rule": {
+          "interval": [{ "field": "cronExpression", "expression": "0 8 * * *" }]
+        }
+      }
+    },
+    {
+      "id": "d47b1e90-5c2a-4f3e-8b6d-1a9c0e7f2b54",
+      "name": "Run now (manual test)",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [0, 180],
+      "parameters": {},
+      "notes": "Lets you run the same flow on demand from the editor or with n8n execute --id."
+    },
+    {
+      "id": "6e483c2a-dba2-4a4c-968d-16022bd762b6",
+      "name": "Config",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [220, 0],
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "b0a086d8-fc21-4912-8ddf-136c293c3bca",
+              "name": "convexSiteUrl",
+              "value": "http://host.docker.internal:3211",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "notes": "convexSiteUrl is the Convex HTTP actions URL (not a secret). n8n/import.sh sets it per environment."
+    },
+    {
+      "id": "b6132fb6-d1ce-480f-be18-32382aeaba35",
+      "name": "Sign overdue request",
+      "type": "n8n-nodes-base.jwt",
+      "typeVersion": 1,
+      "position": [440, 0],
+      "parameters": {
+        "operation": "sign",
+        "useJson": true,
+        "claimsJson": "={\n  \"iss\": \"lendloop-n8n\",\n  \"aud\": \"lendloop-convex\",\n  \"scope\": \"overdue-loans\",\n  \"jti\": \"{{ $execution.id }}-overdue\",\n  \"exp\": {{ Math.floor(Date.now() / 1000) + 300 }}\n}",
+        "options": {}
+      },
+      "credentials": {
+        "jwtAuth": "LendLoop: n8n to Convex"
+      }
+    },
+    {
+      "id": "4e3febad-3131-4228-90df-9eb6a69d3579",
+      "name": "Fetch overdue loans",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [660, 0],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000,
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $('Config').item.json.convexSiteUrl }}/n8n/overdue-loans",
+        "sendHeaders": true,
+        "specifyHeaders": "keypair",
+        "headerParameters": {
+          "parameters": [{ "name": "Authorization", "value": "=Bearer {{ $json.token }}" }]
+        },
+        "options": { "timeout": 15000 }
+      },
+      "notes": "Returns overdue loans grouped by borrower, leaving out loans already reminded today."
+    },
+    {
+      "id": "6b24c20d-b47d-4ec4-a65b-fcb6f823deca",
+      "name": "One item per borrower",
+      "type": "n8n-nodes-base.splitOut",
+      "typeVersion": 1,
+      "position": [880, 0],
+      "parameters": {
+        "fieldToSplitOut": "borrowers",
+        "include": "noOtherFields",
+        "options": {}
+      },
+      "notes": "No overdue loans means no items, and the run ends here."
+    },
+    {
+      "id": "424bc35a-229e-46b8-93f2-6d6446edda39",
+      "name": "Send reminder (mock)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1100, 0],
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "// Mock reminder: one message per borrower listing every overdue tool, logged instead of sent.\nconst borrower = $json;\n// The date Convex used for \"overdue\"; the write-back keys reminders on it.\nconst date = $('Fetch overdue loans').first().json.date;\nconst lines = borrower.loans.map(\n  (loan) => `- ${loan.toolName}: due ${loan.endDate} (${loan.daysOverdue} day${loan.daysOverdue === 1 ? '' : 's'} overdue)`,\n);\nconst message = {\n  channel: 'mock-email',\n  to: borrower.email ?? '(no email on file)',\n  subject: 'Reminder: please return what you borrowed',\n  text: `Hi ${borrower.firstName}, these are past their return date:\\n${lines.join('\\n')}\\nPlease return them or message the lender.`,\n};\nconsole.log('[LendLoop mock reminder]', JSON.stringify(message));\nreturn { json: { ...message, date, loanIds: borrower.loans.map((loan) => loan.loanId) } };"
+      }
+    },
+    {
+      "id": "e295375e-9b6c-4fce-be32-719b696a6b37",
+      "name": "Sign reminder write-back",
+      "type": "n8n-nodes-base.jwt",
+      "typeVersion": 1,
+      "position": [1320, 0],
+      "parameters": {
+        "operation": "sign",
+        "useJson": true,
+        "claimsJson": "={\n  \"iss\": \"lendloop-n8n\",\n  \"aud\": \"lendloop-convex\",\n  \"scope\": \"reminders\",\n  \"jti\": \"{{ $execution.id }}-reminder-{{ $itemIndex }}\",\n  \"exp\": {{ Math.floor(Date.now() / 1000) + 300 }},\n  \"date\": \"{{ $json.date }}\",\n  \"loanIds\": {{ JSON.stringify($json.loanIds) }},\n  \"status\": \"sent\"\n}",
+        "options": {}
+      },
+      "credentials": {
+        "jwtAuth": "LendLoop: n8n to Convex"
+      }
+    },
+    {
+      "id": "89408e1c-860b-4291-9db8-81cf06642409",
+      "name": "Record reminders in Convex",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1540, 0],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000,
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $('Config').item.json.convexSiteUrl }}/n8n/reminders",
+        "sendHeaders": true,
+        "specifyHeaders": "keypair",
+        "headerParameters": {
+          "parameters": [{ "name": "Authorization", "value": "=Bearer {{ $json.token }}" }]
+        },
+        "options": { "timeout": 10000 }
+      },
+      "notes": "Idempotent on loanId:date, so a retried call or a second run on the same day creates no duplicates."
+    }
+  ],
+  "connections": {
+    "Every day at 08:00 UTC": {
+      "main": [[{ "node": "Config", "type": "main", "index": 0 }]]
+    },
+    "Run now (manual test)": {
+      "main": [[{ "node": "Config", "type": "main", "index": 0 }]]
+    },
+    "Config": {
+      "main": [[{ "node": "Sign overdue request", "type": "main", "index": 0 }]]
+    },
+    "Sign overdue request": {
+      "main": [[{ "node": "Fetch overdue loans", "type": "main", "index": 0 }]]
+    },
+    "Fetch overdue loans": {
+      "main": [[{ "node": "One item per borrower", "type": "main", "index": 0 }]]
+    },
+    "One item per borrower": {
+      "main": [[{ "node": "Send reminder (mock)", "type": "main", "index": 0 }]]
+    },
+    "Send reminder (mock)": {
+      "main": [[{ "node": "Sign reminder write-back", "type": "main", "index": 0 }]]
+    },
+    "Sign reminder write-back": {
+      "main": [[{ "node": "Record reminders in Convex", "type": "main", "index": 0 }]]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "UTC",
+    "errorWorkflow": "lendLoopErrors01",
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all",
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner"
+  },
+  "pinData": {},
+  "meta": { "templateCredsSetupCompleted": true },
+  "tags": []
+}

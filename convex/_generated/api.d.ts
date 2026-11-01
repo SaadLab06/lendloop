@@ -19,6 +19,7 @@ import type * as lib_validation from "../lib/validation.js";
 import type * as loans from "../loans.js";
 import type * as n8n from "../n8n.js";
 import type * as outbox from "../outbox.js";
+import type * as seed from "../seed.js";
 import type * as tools from "../tools.js";
 import type * as users from "../users.js";
 
@@ -40,6 +41,7 @@ declare const fullApi: ApiFromModules<{
   loans: typeof loans;
   n8n: typeof n8n;
   outbox: typeof outbox;
+  seed: typeof seed;
   tools: typeof tools;
   users: typeof users;
 }>;

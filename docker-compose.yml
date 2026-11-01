@@ -1,0 +1,27 @@
+# Local n8n for LendLoop development. Start it with: docker compose up -d
+# Then import the workflows with n8n/import.sh (see README, "Local setup").
+services:
+  n8n:
+    image: docker.n8n.io/n8nio/n8n:2.10.2
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:5678:5678" # only reachable from this machine
+    environment:
+      - GENERIC_TIMEZONE=UTC
+      - TZ=UTC
+      # Encrypts the credentials stored in n8n. Keep it stable, or n8n cannot read them after a restart.
+      - N8N_ENCRYPTION_KEY=${N8N_ENCRYPTION_KEY:?Set N8N_ENCRYPTION_KEY in .env}
+      - N8N_HOST=localhost
+      - WEBHOOK_URL=http://localhost:5678/
+      - N8N_SECURE_COOKIE=false # plain http on localhost
+      - N8N_RUNNERS_ENABLED=true
+      - N8N_DIAGNOSTICS_ENABLED=false
+      - N8N_PERSONALIZATION_ENABLED=false
+    extra_hosts:
+      # Lets the workflows reach a Convex backend running on this machine (port 3211).
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - n8n_data:/home/node/.n8n
+
+volumes:
+  n8n_data:

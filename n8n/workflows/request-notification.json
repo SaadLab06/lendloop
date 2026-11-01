@@ -1,0 +1,270 @@
+{
+  "id": "lendLoopNotify01",
+  "name": "LendLoop: request notification",
+  "active": false,
+  "nodes": [
+    {
+      "id": "63cdc45a-af33-4409-9c25-9efe76db2fcc",
+      "name": "Loan event (JWT verified)",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [0, 0],
+      "webhookId": "5b6e9a9e-3bc4-4c91-92a5-64d14c0ef229",
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "lendloop-loan-event",
+        "authentication": "jwtAuth",
+        "responseMode": "onReceived",
+        "options": {}
+      },
+      "credentials": {
+        "jwtAuth": "LendLoop: Convex to n8n"
+      },
+      "notes": "Verifies the HS256 signature, exp and nbf of the bearer token with the 'LendLoop: Convex to n8n' credential. A bad or expired token gets a 403 and the workflow never starts."
+    },
+    {
+      "id": "8cc37a3a-af05-43fc-bf31-6337405a3d96",
+      "name": "Is it a LendLoop event?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [220, 0],
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict", "version": 2 },
+          "conditions": [
+            {
+              "id": "15232289-4bb5-43ea-acc2-9ecd3a98d642",
+              "leftValue": "={{ $json.jwtPayload.iss }}",
+              "rightValue": "lendloop-convex",
+              "operator": { "type": "string", "operation": "equals" }
+            },
+            {
+              "id": "43049230-73c1-46e6-8b70-d1d0056b0580",
+              "leftValue": "={{ $json.jwtPayload.aud }}",
+              "rightValue": "lendloop-n8n",
+              "operator": { "type": "string", "operation": "equals" }
+            },
+            {
+              "id": "e9da1872-a3f7-44f8-aeed-a914ede1f72d",
+              "leftValue": "={{ $json.jwtPayload.exp - $json.jwtPayload.iat }}",
+              "rightValue": 300,
+              "operator": { "type": "number", "operation": "lte" }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "notes": "The signature is already valid. This checks issuer, audience and a short lifetime, so a token meant for another system or with a long replay window is refused."
+    },
+    {
+      "id": "6815ea5c-e960-454e-b7d1-8c71bafdb987",
+      "name": "Reject event",
+      "type": "n8n-nodes-base.stopAndError",
+      "typeVersion": 1,
+      "position": [440, 160],
+      "parameters": {
+        "errorMessage": "Rejected a webhook call: wrong issuer, audience or token lifetime"
+      }
+    },
+    {
+      "id": "497c7356-fc34-45f8-b878-d0e32c516b54",
+      "name": "Event",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [440, -20],
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "c3cd9c09-00fc-4376-8c8f-c0bc4c638e17",
+              "name": "convexSiteUrl",
+              "value": "http://host.docker.internal:3211",
+              "type": "string"
+            },
+            {
+              "id": "5faac830-f464-473c-a5ca-18f361475bf4",
+              "name": "eventId",
+              "value": "={{ $json.jwtPayload.jti }}",
+              "type": "string"
+            },
+            {
+              "id": "95474606-3303-4f54-85be-64d396513fd7",
+              "name": "loanId",
+              "value": "={{ $json.jwtPayload.loanId }}",
+              "type": "string"
+            },
+            {
+              "id": "4d1f5316-8e59-4884-ac5a-1dfd21b69d88",
+              "name": "status",
+              "value": "={{ $json.jwtPayload.status }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "notes": "convexSiteUrl is the Convex HTTP actions URL (not a secret). n8n/import.sh sets it per environment."
+    },
+    {
+      "id": "be61064c-9f1e-45ee-a117-2ae9dc93e40b",
+      "name": "Sign context request",
+      "type": "n8n-nodes-base.jwt",
+      "typeVersion": 1,
+      "position": [660, -20],
+      "parameters": {
+        "operation": "sign",
+        "useJson": true,
+        "claimsJson": "={\n  \"iss\": \"lendloop-n8n\",\n  \"aud\": \"lendloop-convex\",\n  \"scope\": \"loan-context\",\n  \"jti\": \"{{ $execution.id }}-context\",\n  \"exp\": {{ Math.floor(Date.now() / 1000) + 300 }},\n  \"eventId\": \"{{ $json.eventId }}\",\n  \"loanId\": \"{{ $json.loanId }}\"\n}",
+        "options": {}
+      },
+      "credentials": {
+        "jwtAuth": "LendLoop: n8n to Convex"
+      },
+      "notes": "Signs a 5-minute token scoped to this one event and loan. The secret stays in the credential."
+    },
+    {
+      "id": "722ebc51-0352-4220-91da-84b29c42c69a",
+      "name": "Fetch loan context",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [880, -20],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000,
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $('Event').item.json.convexSiteUrl }}/n8n/loan-context",
+        "sendHeaders": true,
+        "specifyHeaders": "keypair",
+        "headerParameters": {
+          "parameters": [{ "name": "Authorization", "value": "=Bearer {{ $json.token }}" }]
+        },
+        "options": { "timeout": 10000 }
+      },
+      "notes": "Returns only the recipient's email and first name, the tool name, the dates and whether this event was already handled."
+    },
+    {
+      "id": "1768deef-d2e6-42f5-8f2c-52fc4db65a99",
+      "name": "Already notified?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [1100, -20],
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict", "version": 2 },
+          "conditions": [
+            {
+              "id": "ed997002-0691-477b-8f85-4b53cbd2f741",
+              "leftValue": "={{ $json.alreadyNotified }}",
+              "rightValue": "",
+              "operator": { "type": "boolean", "operation": "true", "singleValue": true }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "notes": "Dedupes on the event id: a webhook delivered twice sends one notification."
+    },
+    {
+      "id": "79d47f37-a05f-4b95-b51b-7410dcb1639b",
+      "name": "Skip duplicate",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [1320, -140],
+      "parameters": {}
+    },
+    {
+      "id": "a9b15cf5-aeb7-47cc-b612-032ea99b0668",
+      "name": "Send notification (mock)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1320, 40],
+      "parameters": {
+        "jsCode": "// Mock notification: builds the message an Email or Slack node would send and logs it.\n// Swap this node for a real channel; the fields it needs are already here.\nconst context = $input.first().json;\nconst tool = context.toolName;\nconst subjects = {\n  pending: `New request to borrow your ${tool}`,\n  approved: `Your request for the ${tool} was approved`,\n  declined: `Your request for the ${tool} was declined`,\n  cancelled: `A request for your ${tool} was cancelled`,\n  returned: `Loan closed: the ${tool} is back with its owner`,\n};\nconst subject = subjects[context.status] ?? `Update on the ${tool}`;\nconst message = {\n  channel: 'mock-email',\n  to: context.recipient.email ?? '(no email on file)',\n  subject,\n  text: `Hi ${context.recipient.firstName}. ${subject} (${context.startDate} to ${context.endDate}). Open LendLoop for details.`,\n};\nconsole.log('[LendLoop mock notification]', JSON.stringify(message));\nreturn [{ json: message }];"
+      }
+    },
+    {
+      "id": "3c9e1247-4344-4a86-9b94-ab5b385a6e20",
+      "name": "Sign activity write-back",
+      "type": "n8n-nodes-base.jwt",
+      "typeVersion": 1,
+      "position": [1540, 40],
+      "parameters": {
+        "operation": "sign",
+        "useJson": true,
+        "claimsJson": "={\n  \"iss\": \"lendloop-n8n\",\n  \"aud\": \"lendloop-convex\",\n  \"scope\": \"notification\",\n  \"jti\": \"{{ $execution.id }}-notification\",\n  \"exp\": {{ Math.floor(Date.now() / 1000) + 300 }},\n  \"eventId\": \"{{ $('Event').item.json.eventId }}\",\n  \"loanId\": \"{{ $('Event').item.json.loanId }}\"\n}",
+        "options": {}
+      },
+      "credentials": {
+        "jwtAuth": "LendLoop: n8n to Convex"
+      }
+    },
+    {
+      "id": "0afd9bb5-1d49-490e-af03-cb725bcd4015",
+      "name": "Record activity in Convex",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1760, 40],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000,
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $('Event').item.json.convexSiteUrl }}/n8n/notifications",
+        "sendHeaders": true,
+        "specifyHeaders": "keypair",
+        "headerParameters": {
+          "parameters": [{ "name": "Authorization", "value": "=Bearer {{ $json.token }}" }]
+        },
+        "options": { "timeout": 10000 }
+      },
+      "notes": "Idempotent on the event id, so a retry after a lost response does not create a second record."
+    }
+  ],
+  "connections": {
+    "Loan event (JWT verified)": {
+      "main": [[{ "node": "Is it a LendLoop event?", "type": "main", "index": 0 }]]
+    },
+    "Is it a LendLoop event?": {
+      "main": [
+        [{ "node": "Event", "type": "main", "index": 0 }],
+        [{ "node": "Reject event", "type": "main", "index": 0 }]
+      ]
+    },
+    "Event": {
+      "main": [[{ "node": "Sign context request", "type": "main", "index": 0 }]]
+    },
+    "Sign context request": {
+      "main": [[{ "node": "Fetch loan context", "type": "main", "index": 0 }]]
+    },
+    "Fetch loan context": {
+      "main": [[{ "node": "Already notified?", "type": "main", "index": 0 }]]
+    },
+    "Already notified?": {
+      "main": [
+        [{ "node": "Skip duplicate", "type": "main", "index": 0 }],
+        [{ "node": "Send notification (mock)", "type": "main", "index": 0 }]
+      ]
+    },
+    "Send notification (mock)": {
+      "main": [[{ "node": "Sign activity write-back", "type": "main", "index": 0 }]]
+    },
+    "Sign activity write-back": {
+      "main": [[{ "node": "Record activity in Convex", "type": "main", "index": 0 }]]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "UTC",
+    "errorWorkflow": "lendLoopErrors01",
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all",
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner"
+  },
+  "pinData": {},
+  "meta": { "templateCredsSetupCompleted": true },
+  "tags": []
+}
